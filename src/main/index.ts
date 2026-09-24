@@ -7,9 +7,11 @@ import { DocumentAccess } from './document-access'
 import { DocumentError, readDocument } from './document-io'
 import { DocumentOperationQueue } from './document-operations'
 import { DraftStore } from './drafts'
+import { WorkspaceFolder } from './workspace-folder'
 import type { Draft, OpenedDocument } from '../shared/contracts'
 
 const documents = new DocumentAccess()
+const workspaceFolder = new WorkspaceFolder()
 let drafts: DraftStore
 let window: BrowserWindow | null = null
 const watchers = new Map<string, FSWatcher>()
@@ -108,6 +110,7 @@ function createWindow(): void {
     window = null
     for (const path of watchers.keys()) stopWatching(path)
     documents.closeAll()
+    workspaceFolder.clear()
   })
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) void window.loadURL(devUrl)
@@ -136,6 +139,19 @@ else {
   })
 }
 
+register('choose-workspace-folder', async () => {
+  const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] })
+  return result.canceled ? null : workspaceFolder.select(result.filePaths[0])
+})
+register('list-workspace-directory', async (path: string) => workspaceFolder.list(path))
+register('open-workspace-document', async (path: string) => {
+  const opened = documents.openSnapshot(await workspaceFolder.openDocument(path))
+  await remember(opened.path)
+  watchDocument(opened.path)
+  return opened
+})
+register('search-workspace', async (query: string) => workspaceFolder.search(query))
+register('close-workspace-folder', async () => { workspaceFolder.clear() })
 register('choose-open', async () => {
   const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: 'Markdown', extensions: ['md'] }] })
   return result.canceled ? null : activate(result.filePaths[0])

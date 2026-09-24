@@ -1,4 +1,5 @@
 export type BlockKind = 'list' | 'task' | 'quote' | 'code'
+export type ListKind = 'unordered' | 'ordered' | 'task'
 
 export interface MarkdownInsertion {
   text: string
@@ -35,4 +36,25 @@ export function blockTemplate(kind: BlockKind): MarkdownInsertion {
     code: { text: '```\n\n```', selectionStart: 4, selectionEnd: 4 },
   }
   return templates[kind]
+}
+
+export function formatListLines(text: string, kind: ListKind): string {
+  const lines = text.split('\n')
+  const counters = new Map<number, number>()
+  return lines.map(line => {
+    if (!line.trim() && lines.length > 1) return line
+    const match = line.match(/^(\s*)(?:(?:[-+*]\s+(?:\[[ xX]\]\s+)?)|(?:\d+[.)]\s+))?(.*)$/)
+    if (!match) return line
+    const [, indent, content] = match
+    for (const depth of counters.keys()) if (depth > indent.length) counters.delete(depth)
+    let marker: string
+    if (kind === 'ordered') {
+      const number = (counters.get(indent.length) ?? 0) + 1
+      counters.set(indent.length, number)
+      marker = `${number}. `
+    } else if (kind === 'task') {
+      marker = /^\s*[-+*]\s+\[[xX]\]\s+/.test(line) ? '- [x] ' : '- [ ] '
+    } else marker = '- '
+    return `${indent}${marker}${content}`
+  }).join('\n')
 }

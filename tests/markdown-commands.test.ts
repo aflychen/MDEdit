@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blockTemplate, createTable, setHeading } from '../src/renderer/markdown-commands'
+import { blockTemplate, createTable, formatListLines, setHeading } from '../src/renderer/markdown-commands'
 
 describe('Markdown commands', () => {
   it('changes an existing heading level while keeping its text', () => {
@@ -47,5 +47,23 @@ describe('Markdown commands', () => {
     expect(code.text).toBe('```\n\n```')
     expect(code.selectionStart).toBe(4)
     expect(code.selectionEnd).toBe(4)
+  })
+
+  it('converts selected lines to consecutively numbered items', () => {
+    expect(formatListLines('alpha\n- beta\n- [x] gamma', 'ordered')).toBe('1. alpha\n2. beta\n3. gamma')
+  })
+
+  it('keeps indentation and numbers nested levels independently', () => {
+    expect(formatListLines('  - parent\n    - child\n  - next', 'ordered')).toBe('  1. parent\n    1. child\n  2. next')
+  })
+
+  it('changes ordered items into task items while preserving their text', () => {
+    expect(formatListLines('1. One\n2. Two', 'task')).toBe('- [ ] One\n- [ ] Two')
+    expect(formatListLines('- [x] Done', 'task')).toBe('- [x] Done')
+  })
+
+  it('leaves blank lines and starts an empty item at the cursor', () => {
+    expect(formatListLines('alpha\n\nbeta', 'ordered')).toBe('1. alpha\n\n2. beta')
+    expect(formatListLines('', 'ordered')).toBe('1. ')
   })
 })

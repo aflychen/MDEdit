@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { lstat, open, readFile, rename, rm, stat } from 'node:fs/promises'
+import { lstat, open, realpath, rename, rm, stat, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import type { LineEnding, OpenedDocument, SaveResult } from '../shared/contracts'
 
@@ -32,15 +32,15 @@ async function ensureRegularFile(path: string): Promise<void> {
   if (!entry.isFile()) throw new DocumentError('NOT_FILE', '路径不是普通文件')
 }
 
-export async function readDocument(path: string): Promise<OpenedDocument> {
-  await ensureRegularFile(path)
-  const bytes = await readFile(path)
+export async function readDocumentFromHandle(path: string, handle: FileHandle): Promise<OpenedDocument> {
+  const metadata = await handle.stat()
+  if (!metadata.isFile()) throw new DocumentError('NOT_FILE', '路径不是普通文件')
+  const bytes = await handle.readFile()
   let decoded: string
   try { decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
   catch { throw new DocumentError('INVALID_UTF8', '文件不是有效的 UTF-8 文本') }
   const hasBom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
   const raw = decoded.startsWith('\ufeff') ? decoded.slice(1) : decoded
-  const metadata = await stat(path)
   return {
     path,
     text: raw.replace(/\r\n?/g, '\n'),
@@ -51,21 +51,45 @@ export async function readDocument(path: string): Promise<OpenedDocument> {
   }
 }
 
-interface Baseline { fingerprint: string; lineEnding: LineEnding; hasBom: boolean }
+export async function readDocument(path: string): Promise<OpenedDocument> {
+  await ensureRegularFile(path)
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try { return await readDocumentFromHandle(path, handle) }
+  finally { await handle.close() }
+}
+
+async function readCurrentFile(path: string, canonicalPath: string): Promise<{ bytes: Buffer; mode: number }> {
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const [actualPath, opened, pathEntry] = await Promise.all([realpath(path), handle.stat(), stat(path)])
+    if (actualPath !== canonicalPath || !opened.isFile() || opened.dev !== pathEntry.dev || opened.ino !== pathEntry.ino) {
+      throw new DocumentError('SYMLINK', '文档路径已改变，请另存为普通文件')
+    }
+    return { bytes: await handle.readFile(), mode: opened.mode & 0o777 }
+  } finally { await handle.close() }
+}
+
+interface Baseline { fingerprint: string; lineEnding: LineEnding; hasBom: boolean; canonicalPath: string }
 
 export class DocumentStore {
   private baselines = new Map<string, Baseline>()
 
-  async open(path: string): Promise<OpenedDocument> {
-    const document = await readDocument(path)
-    if (!this.baselines.has(path)) this.baselines.set(path, document)
+  adopt(document: OpenedDocument, canonicalPath = document.path): OpenedDocument {
+    if (!this.baselines.has(document.path)) this.baselines.set(document.path, { ...document, canonicalPath })
     return document
   }
 
-  async reload(path: string): Promise<OpenedDocument> {
-    if (!this.baselines.has(path)) throw new DocumentError('NOT_OPEN', '文档尚未打开')
+  async open(path: string): Promise<OpenedDocument> {
     const document = await readDocument(path)
-    this.baselines.set(path, document)
+    return this.adopt(document, await realpath(path))
+  }
+
+  async reload(path: string): Promise<OpenedDocument> {
+    const baseline = this.baselines.get(path)
+    if (!baseline) throw new DocumentError('NOT_OPEN', '文档尚未打开')
+    if (await realpath(path) !== baseline.canonicalPath) throw new DocumentError('SYMLINK', '文档路径已改变，请另存为普通文件')
+    const document = await readDocument(path)
+    this.baselines.set(path, { ...document, canonicalPath: baseline.canonicalPath })
     return document
   }
 
@@ -89,16 +113,19 @@ export class DocumentStore {
     if (baseline.lineEnding === 'mixed' && !allowMixed) {
       throw new DocumentError('MIXED_LINE_ENDINGS', '混合换行文件需要确认转换或另存副本')
     }
-    await ensureRegularFile(path)
-    const originalMode = (await stat(path)).mode & 0o777
-    const current = await readFile(path)
-    if (hash(current) !== baseline.fingerprint) throw new DocumentError('CONFLICT', '磁盘文件已被其他程序修改')
+    const current = await readCurrentFile(path, baseline.canonicalPath)
+    if (hash(current.bytes) !== baseline.fingerprint) throw new DocumentError('CONFLICT', '磁盘文件已被其他程序修改')
     const bytes = encode(text, baseline)
     const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
     try {
       const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600)
-      try { await handle.writeFile(bytes); await handle.chmod(originalMode); await handle.sync() }
+      try { await handle.writeFile(bytes); await handle.chmod(current.mode); await handle.sync() }
       finally { await handle.close() }
+      if (await realpath(temporary) !== join(dirname(baseline.canonicalPath), basename(temporary))) {
+        throw new DocumentError('SYMLINK', '文档目录已改变，请另存为普通文件')
+      }
+      const latest = await readCurrentFile(path, baseline.canonicalPath)
+      if (hash(latest.bytes) !== baseline.fingerprint) throw new DocumentError('CONFLICT', '磁盘文件已被其他程序修改')
       await rename(temporary, path)
       try {
         const directory = await open(dirname(path), constants.O_RDONLY)

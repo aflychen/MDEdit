@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -90,6 +90,26 @@ describe('document IO', () => {
     await symlink(target, path)
     const store = new DocumentStore()
     await expect(store.open(path)).rejects.toMatchObject({ code: 'SYMLINK' })
+  })
+
+  it('refuses saving when a parent directory becomes a symbolic link', async () => {
+    const file = await fixture()
+    const root = paths[paths.length - 1]
+    const inside = join(root, 'inside')
+    const outside = join(root, 'outside')
+    await mkdir(inside)
+    await mkdir(outside)
+    const original = join(inside, 'note.md')
+    const other = join(outside, 'note.md')
+    await writeFile(original, 'same')
+    await writeFile(other, 'same')
+    const store = new DocumentStore()
+    await store.open(original)
+    await rename(inside, join(root, 'moved'))
+    await symlink(outside, inside)
+
+    await expect(store.save(original, 'new')).rejects.toMatchObject({ code: 'SYMLINK' })
+    expect(await readFile(other, 'utf8')).toBe('same')
   })
 
   it('keeps the file permissions after atomic replacement', async () => {

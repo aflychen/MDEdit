@@ -8,6 +8,11 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api: DesktopApi = {
+  chooseWorkspaceFolder: () => invoke('choose-workspace-folder'),
+  listWorkspaceDirectory: path => invoke('list-workspace-directory', path),
+  openWorkspaceDocument: path => invoke('open-workspace-document', path),
+  searchWorkspace: query => invoke('search-workspace', query),
+  closeWorkspaceFolder: () => invoke('close-workspace-folder'),
   chooseOpen: () => invoke('choose-open'),
   openRecent: path => invoke('open-recent', path),
   openSystemFile: path => invoke('open-system-file', path),

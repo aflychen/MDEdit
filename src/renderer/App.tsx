@@ -5,12 +5,16 @@ import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { openSearchPanel } from '@codemirror/search'
 import iconUrl from '../../assets/icon.svg'
-import type { Draft, OpenedDocument } from '../shared/contracts'
+import type { Draft, OpenedDocument, WorkspaceSearchResult } from '../shared/contracts'
 import { applyEdit, beginSave, completeSave, failSave, failSaveAs, newSession, sessionFromDocument, type DocumentSession } from './session'
 import { activateTab, closeTab, initialWorkspace, openTab, replaceTab, tabIndexForKey, updateTab, type TabWorkspace } from './tabs'
-import { blockTemplate, createTable, setHeading, type MarkdownInsertion } from './markdown-commands'
+import { blockTemplate, createTable, formatListLines, setHeading, type ListKind, type MarkdownInsertion } from './markdown-commands'
 import { precedingIndex } from './outline-navigation'
 import type { OutlineHeading } from './preview'
+import WorkspaceSidebar from './WorkspaceSidebar'
+import { editorTheme } from './editor-theme'
+import { parseThemePreference, resolveTheme, type ThemePreference } from './theme'
+import { searchResultPosition } from './search-navigation'
 
 const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
 const statusLabel = (session: DocumentSession) => ({ editing: '编辑中', saving: '正在保存', saved: '已保存', error: '保存失败', conflict: '磁盘冲突' })[session.saveState]
@@ -24,7 +28,15 @@ export default function App() {
   const workspaceRef = useRef(workspace)
   const session = workspace.tabs.find(tab => tab.id === workspace.activeId)!
   const [previewVisible, setPreviewVisible] = useState(true)
-  const [outlineVisible, setOutlineVisible] = useState(true)
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    try { return parseThemePreference(localStorage.getItem('mdedit-theme')) }
+    catch { return 'system' }
+  })
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const resolvedTheme = resolveTheme(themePreference, systemDark)
+  const [sidebarView, setSidebarView] = useState<'files' | 'search' | 'outline' | null>('outline')
+  const [folderRoot, setFolderRoot] = useState<string | null>(null)
+  const [jumpRequest, setJumpRequest] = useState<{ path: string; line: number; column: number } | null>(null)
   const [previews, setPreviews] = useState<Record<number, PreviewSnapshot>>({})
   const previewsRef = useRef(previews)
   const lastPreview = previews[session.id]
@@ -46,6 +58,7 @@ export default function App() {
   const editorExtensions = useRef<Extension[]>([])
   const worker = useRef<Worker | null>(null)
   const editability = useRef(new Compartment())
+  const editorAppearance = useRef(new Compartment())
   const lockedId = useRef<number | null>(null)
   const operationLock = useRef(false)
   const pendingOpenPaths = useRef<string[]>([])
@@ -53,6 +66,20 @@ export default function App() {
   const draftWrites = useRef(new Map<number, Promise<void>>())
   const backedUp = useRef(new Map<number, string>())
   const scrollGuard = useRef(false)
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const updateSystemTheme = () => setSystemDark(media.matches)
+    media.addEventListener('change', updateSystemTheme)
+    return () => media.removeEventListener('change', updateSystemTheme)
+  }, [])
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme
+    try { localStorage.setItem('mdedit-theme', themePreference) } catch { /* Preference storage may be unavailable. */ }
+  }, [resolvedTheme, themePreference])
+  useEffect(() => {
+    editor.current?.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
+  }, [resolvedTheme])
 
   const changeWorkspace = useCallback((change: (current: TabWorkspace) => TabWorkspace) => {
     const next = change(workspaceRef.current)
@@ -181,17 +208,36 @@ export default function App() {
     try { return await task } finally { if (saves.current.get(id) === entry) saves.current.delete(id) }
   }, [getSession, saveAs, update])
 
-  const openDocument = useCallback(async (operation: () => Promise<OpenedDocument | null>) => {
-    if (!beginOperation(workspaceRef.current.activeId)) return
+  const openDocument = useCallback(async (operation: () => Promise<OpenedDocument | null>): Promise<OpenedDocument | null> => {
+    if (!beginOperation(workspaceRef.current.activeId)) return null
     try {
       const opened = await operation()
-      if (!opened) return
+      if (!opened) return null
       changeWorkspace(current => openTab(current, sessionFromDocument(opened)))
       setNotice(opened.lineEnding === 'mixed' ? '此文件包含混合换行。写回前需要确认统一为 LF，或另存副本。' : null)
       void window.mdedit.recentFiles().then(setRecent)
-    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+      return opened
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); return null }
     finally { endOperation() }
   }, [beginOperation, changeWorkspace, endOperation])
+  const chooseFolder = useCallback(async () => {
+    try {
+      const root = await window.mdedit.chooseWorkspaceFolder()
+      if (root) { setFolderRoot(root); setSidebarView('files'); setNotice(null) }
+    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+  }, [])
+  const closeFolder = useCallback(async () => {
+    try { await window.mdedit.closeWorkspaceFolder(); setFolderRoot(null) }
+    catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+  }, [])
+  const openSearchResult = useCallback(async (result: WorkspaceSearchResult, query: string) => {
+    const opened = await openDocument(() => window.mdedit.openWorkspaceDocument(result.path))
+    if (!opened) return
+    const current = workspaceRef.current.tabs.find(tab => tab.path === opened.path)
+    const match = searchResultPosition(result, query, opened, current?.text ?? opened.text)
+    if (match) setJumpRequest({ path: opened.path, ...match })
+    else setNotice('搜索结果对应的内容已改变，请重新搜索。')
+  }, [openDocument])
   const newDocument = useCallback(() => {
     if (operationLock.current) return
     changeWorkspace(current => openTab(current, newSession()))
@@ -305,6 +351,18 @@ export default function App() {
     view.dispatch({ changes })
     view.focus()
   }, [])
+  const changeList = useCallback((kind: ListKind) => {
+    const view = editor.current
+    if (!view || operationLock.current) return
+    const range = view.state.selection.main
+    const first = view.state.doc.lineAt(range.from)
+    const end = range.to > range.from && view.state.doc.lineAt(range.to).from === range.to ? range.to - 1 : range.to
+    const last = view.state.doc.lineAt(end)
+    const replacement = formatListLines(view.state.sliceDoc(first.from, last.to), kind)
+    const marker = replacement.match(/^\s*(?:- \[[ x]\] |- |\d+\. )/)?.[0].length ?? 0
+    view.dispatch({ changes: { from: first.from, to: last.to, insert: replacement }, selection: range.empty ? { anchor: first.from + marker } : { anchor: first.from, head: first.from + replacement.length } })
+    view.focus()
+  }, [])
   const syncPreviewToLine = useCallback((line: number) => {
     const root = previewHost.current
     const id = workspaceRef.current.activeId
@@ -330,7 +388,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     if (!editorHost.current) return
-    editorExtensions.current = [basicSetup, markdown(), editability.current.of(EditorState.readOnly.of(false)), EditorView.lineWrapping,
+    editorExtensions.current = [basicSetup, markdown(), editability.current.of(EditorState.readOnly.of(false)), editorAppearance.current.of(editorTheme(resolvedTheme)), EditorView.lineWrapping,
       keymap.of([
         { key: 'Mod-b', run: () => { wrapSelection('**'); return true } },
         { key: 'Mod-i', run: () => { wrapSelection('*'); return true } },
@@ -369,6 +427,7 @@ export default function App() {
     scrollGuard.current = true
     view.setState(saved?.state ?? EditorState.create({ doc: session.text, extensions: editorExtensions.current }))
     view.dispatch({ effects: editability.current.reconfigure(EditorState.readOnly.of(operationLock.current)) })
+    view.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
     view.scrollDOM.scrollTop = saved?.top ?? 0
     view.scrollDOM.scrollLeft = saved?.left ?? 0
     view.requestMeasure({
@@ -383,7 +442,16 @@ export default function App() {
     setCursor({ line: line.number, column: view.state.selection.main.head - line.from + 1 })
     setTableOpen(false)
     requestAnimationFrame(() => { scrollGuard.current = false })
-  }, [getSession, session.id, session.text])
+  }, [getSession, resolvedTheme, session.id, session.text])
+  useLayoutEffect(() => {
+    const view = editor.current
+    if (!jumpRequest || !view || jumpRequest.path !== session.path || editorId.current !== session.id) return
+    const line = view.state.doc.line(Math.min(Math.max(1, jumpRequest.line), view.state.doc.lines))
+    const position = line.from + Math.min(Math.max(0, jumpRequest.column - 1), line.length)
+    view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
+    view.focus()
+    setJumpRequest(null)
+  }, [jumpRequest, session.id, session.path])
   useEffect(() => {
     const instance = new Worker(new URL('./preview.worker.ts', import.meta.url), { type: 'module' })
     worker.current = instance
@@ -547,7 +615,7 @@ export default function App() {
     <header className="topbar">
       <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
       <div className="document-title"><strong>{documentName(session.path)}</strong><span className={`save-status status-${session.saveState}`}><i />{statusLabel(session)}</span></div>
-      <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button></div>
+      <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void chooseFolder()}>打开文件夹</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button></div>
     </header>
     <nav className="tabbar" aria-label="文档标签"><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
       <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? '未命名文档'} · ${statusLabel(tab)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path)}</span></button>
@@ -555,11 +623,11 @@ export default function App() {
     </div>)}</div><button disabled={busy} className="new-tab" aria-label="新建文档标签" onClick={newDocument}>＋</button></nav>
     {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice || session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>重新载入磁盘文件</button><button disabled={busy} onClick={() => void saveAs()}>将当前内容另存副本</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>重试</button><button disabled={busy} onClick={() => void saveAs()}>另存为</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
     {drafts.length > 0 && <div className="recovery-strip"><span>发现 {drafts.length} 份可恢复草稿</span>{drafts.map(draft => <button disabled={busy} key={draft.key} onClick={() => void restore(draft)}>恢复 {documentName(draft.path)} · {new Date(draft.updatedAt).toLocaleString()}{draft.path ? ` · 磁盘 ${draft.diskModifiedAt ? new Date(draft.diskModifiedAt).toLocaleString() : '文件不可用'}` : ''}</button>)}<button className="plain" onClick={() => setDrafts([])}>稍后</button></div>}
-    <div className="toolbar"><div className="tool-group"><button className={outlineVisible ? 'selected' : ''} aria-expanded={outlineVisible} onClick={() => setOutlineVisible(value => !value)}>目录</button><select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select><button disabled={busy} onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button><button disabled={busy} onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button><button disabled={busy} onClick={() => wrapSelection('`')} title="行内代码">{'</>'}</button><button disabled={busy} onClick={() => wrapSelection('[', '](https://)')} title="链接">链接</button>
+    <div className="toolbar"><div className="tool-group"><button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button><button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>搜索</button><button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>目录</button><select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select><button disabled={busy} onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button><button disabled={busy} onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button><button disabled={busy} onClick={() => wrapSelection('`')} title="行内代码">{'</>'}</button><button disabled={busy} onClick={() => wrapSelection('[', '](https://)')} title="链接">链接</button>
       <div className="table-tool"><button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格</button>{tableOpen && <form className="table-picker" onSubmit={event => { event.preventDefault(); insertBlock(createTable(tableColumns, tableRows)) }}><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>}</div>
-      <button disabled={busy} onClick={() => insertBlock(blockTemplate('list'))}>列表</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('task'))}>任务</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('quote'))}>引用</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('code'))}>代码块</button><button onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)">⌕</button></div><div className="toolbar-right"><button className={previewVisible ? 'selected' : ''} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '隐藏预览' : '显示预览'}</button></div></div>
-    <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${outlineVisible ? 'with-outline' : ''}`}>
-      {outlineVisible && <aside className="outline-pane" aria-label="当前文档目录"><div className="pane-label">目录 <button aria-label="收起目录" onClick={() => setOutlineVisible(false)}>‹</button></div><nav>{preview?.outline?.length ? preview.outline.map((heading, index) => <button key={`${heading.line}:${index}`} disabled={busy} style={{ paddingLeft: `${14 + (heading.depth - 1) * 12}px` }} onClick={() => jumpToHeading(heading)} title={`H${heading.depth} · 第 ${heading.line} 行`}>{heading.text || '空标题'}</button>) : <p>{preview ? '添加标题后在这里导航' : '正在更新目录…'}</p>}</nav></aside>}
+      <select aria-label="列表格式" disabled={busy} value="" onChange={event => changeList(event.target.value as ListKind)}><option value="" disabled>列表</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select><button disabled={busy} onClick={() => insertBlock(blockTemplate('quote'))}>引用</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('code'))}>代码块</button><button onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)">⌕</button></div><div className="toolbar-right"><select aria-label="外观主题" value={themePreference} onChange={event => setThemePreference(event.target.value as ThemePreference)}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select><button className={previewVisible ? 'selected' : ''} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '隐藏预览' : '显示预览'}</button></div></div>
+    <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
+      {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={preview?.outline} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
       <section className="editor-pane" id="document-editor"><div className="pane-label">编辑器 <span>MARKDOWN</span></div><div className="editor-host" ref={editorHost} /></section>
       {previewVisible && <section className="preview-pane"><div className="pane-label">实时预览 <span>{preview ? 'PREVIEW' : '更新中'}</span></div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={session.id} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll} dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} />}</section>}
     </main>

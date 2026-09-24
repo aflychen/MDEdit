@@ -23,7 +23,34 @@ export interface Draft {
 export interface SaveResult { fingerprint: string; modifiedAt: number }
 export interface AppError { code: string; message: string }
 
+export interface WorkspaceEntry {
+  name: string
+  path: string
+  absolutePath: string
+  kind: 'directory' | 'file'
+}
+
+export interface WorkspaceSearchResult {
+  path: string
+  absolutePath: string
+  line: number
+  column: number
+  snippet: string
+  fingerprint: string
+}
+
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[]
+  truncated: boolean
+  skipped: number
+}
+
 export interface DesktopApi {
+  chooseWorkspaceFolder(): Promise<string | null>
+  listWorkspaceDirectory(path: string): Promise<WorkspaceEntry[]>
+  openWorkspaceDocument(path: string): Promise<OpenedDocument>
+  searchWorkspace(query: string): Promise<WorkspaceSearchResponse>
+  closeWorkspaceFolder(): Promise<void>
   chooseOpen(): Promise<OpenedDocument | null>
   openSystemFile(path: string): Promise<OpenedDocument>
   openRelative(basePath: string, path: string): Promise<OpenedDocument>

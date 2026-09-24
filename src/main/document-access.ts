@@ -16,6 +16,10 @@ export class DocumentAccess {
     return this.documents.open(await realpath(path))
   }
 
+  openSnapshot(document: OpenedDocument): OpenedDocument {
+    return this.documents.adopt(document)
+  }
+
   async reload(path: string): Promise<OpenedDocument> {
     this.assertOpen(path)
     return this.documents.reload(path)
