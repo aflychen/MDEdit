@@ -1,6 +1,6 @@
 {
   "name": "mdedit",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "A local Markdown editor",
   "main": "./out/main/index.js",
@@ -18,8 +18,8 @@
     "appId": "dev.mdedit.app",
     "productName": "MDEdit",
     "files": ["out/**/*", "package.json"],
-    "mac": {"category": "public.app-category.productivity", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]},
-    "win": {"target": "nsis", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]}
+    "mac": {"icon": "assets/icon.icns", "category": "public.app-category.productivity", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]},
+    "win": {"icon": "assets/icon.ico", "target": "nsis", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]}
   },
   "dependencies": {
     "@codemirror/commands": "^6.0.0",

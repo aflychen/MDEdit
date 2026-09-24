@@ -4,6 +4,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { openSearchPanel } from '@codemirror/search'
+import iconUrl from '../../assets/icon.svg'
 import type { Draft, OpenedDocument } from '../shared/contracts'
 import { applyEdit, beginSave, completeSave, failSave, failSaveAs, newSession, sessionFromDocument, type DocumentSession } from './session'
 import { activateTab, closeTab, initialWorkspace, openTab, replaceTab, tabIndexForKey, updateTab, type TabWorkspace } from './tabs'
@@ -544,7 +545,7 @@ export default function App() {
   }
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand"><span className="brand-mark">M</span><span>MDEdit</span></div>
+      <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
       <div className="document-title"><strong>{documentName(session.path)}</strong><span className={`save-status status-${session.saveState}`}><i />{statusLabel(session)}</span></div>
       <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button></div>
     </header>

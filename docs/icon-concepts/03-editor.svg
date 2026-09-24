@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MDE editor icon concept">
+  <rect width="512" height="512" rx="112" fill="#17202C"/>
+  <rect x="51" y="91" width="410" height="330" rx="29" fill="#243244" stroke="#526278" stroke-width="8"/>
+  <path d="M51 155h410" stroke="#526278" stroke-width="8"/>
+  <circle cx="91" cy="124" r="10" fill="#F1746B"/>
+  <circle cx="124" cy="124" r="10" fill="#E2B45D"/>
+  <circle cx="157" cy="124" r="10" fill="#5FC7A5"/>
+  <text x="114" y="316" font-family="'SFMono-Regular', Menlo, Consolas, monospace" font-size="145" font-weight="700" letter-spacing="-9" fill="#F5F7FF">MDE</text>
+  <rect x="373" y="213" width="13" height="111" rx="2" fill="#7D9BFF"/>
+  <path d="M114 356h196" stroke="#536681" stroke-width="11" stroke-linecap="round"/>
+</svg>

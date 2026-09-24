@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MDEdit icon">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0F3FF"/>
+      <stop offset="1" stop-color="#DCE5FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <path d="M108 64h213l83 83v296H108z" fill="#B5C2EC" opacity=".36" transform="translate(0 10)"/>
+  <path d="M108 64h213l83 83v296H108z" fill="#FFFFFF" stroke="#2942CA" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M321 64v83h83z" fill="#D7E0FF" stroke="#2942CA" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M141 333V218l35 51 35-51v115" fill="none" stroke="#253CDB" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M234 218h24c36 0 55 22 55 57s-19 58-55 58h-24z" fill="none" stroke="#253CDB" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M382 218h-46v115h46M336 275h39" fill="none" stroke="#253CDB" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M145 374h216" stroke="#B3C0EC" stroke-width="12" stroke-linecap="round"/>
+</svg>
