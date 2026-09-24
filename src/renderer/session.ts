@@ -56,3 +56,7 @@ export function completeSave(session: DocumentSession, revision: number, fingerp
 export function failSave(session: DocumentSession, error: string): DocumentSession {
   return { ...session, saveState: 'error', error }
 }
+
+export function failSaveAs(session: DocumentSession, error: string): DocumentSession {
+  return session.saveState === 'conflict' ? session : failSave(session, error)
+}

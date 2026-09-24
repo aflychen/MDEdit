@@ -1,9 +1,11 @@
-import { countWords, renderMarkdown } from './preview'
+import { countWords, renderPreview } from './preview'
 
-self.onmessage = (event: MessageEvent<{ revision: number; text: string }>) => {
+self.onmessage = (event: MessageEvent<{ sessionId: number; revision: number; text: string }>) => {
+  const { sessionId, revision, text } = event.data
   try {
-    self.postMessage({ revision: event.data.revision, html: renderMarkdown(event.data.text), words: countWords(event.data.text) })
+    const { html, outline } = renderPreview(text)
+    self.postMessage({ sessionId, revision, html, outline, words: countWords(text) })
   } catch (error) {
-    self.postMessage({ revision: event.data.revision, error: error instanceof Error ? error.message : String(error) })
+    self.postMessage({ sessionId, revision, error: error instanceof Error ? error.message : String(error) })
   }
 }

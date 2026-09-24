@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, beginSave, completeSave, failSave, newSession, sessionFromDocument } from '../src/renderer/session'
+import { applyEdit, beginSave, completeSave, failSave, failSaveAs, newSession, sessionFromDocument } from '../src/renderer/session'
 
 describe('document session', () => {
   it('keeps a newer edit dirty when an older save finishes', () => {
@@ -38,6 +38,12 @@ describe('document session', () => {
     const edited = applyEdit(conflict, 'newer local edit')
     expect(edited.saveState).toBe('conflict')
     expect(edited.error).toBe('disk changed')
+  })
+
+  it('keeps disk conflict actions available when Save As fails', () => {
+    const conflict = { ...newSession('mine'), saveState: 'conflict' as const, error: 'disk changed' }
+    expect(failSaveAs(conflict, 'destination exists')).toEqual(conflict)
+    expect(failSaveAs(newSession('mine'), 'destination exists').saveState).toBe('error')
   })
 
   it('gives separate unnamed documents separate recovery keys', () => {
