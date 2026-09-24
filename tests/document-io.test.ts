@@ -54,9 +54,10 @@ describe('document IO', () => {
     const path = await fixture()
     await writeFile(path, 'before')
     await chmod(path, 0o644)
+    const originalMode = (await stat(path)).mode & 0o777
     const store = new DocumentStore()
     await store.open(path)
     await store.save(path, 'after')
-    expect((await stat(path)).mode & 0o777).toBe(0o644)
+    expect((await stat(path)).mode & 0o777).toBe(originalMode)
   })
 })
