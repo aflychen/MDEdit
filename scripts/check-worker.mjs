@@ -11,7 +11,10 @@ const code = await readFile(join(directory, workerName), 'utf8')
 const messages = []
 const self = { postMessage: message => messages.push(message) }
 runInNewContext(code, { self, TextDecoder, TextEncoder, URL, console }, { filename: workerName })
-self.onmessage({ data: { revision: 7, text: '# Worker ready' } })
+self.onmessage({ data: { sessionId: 13, revision: 7, text: '# Worker ready' } })
+assert.equal(messages[0].sessionId, 13)
 assert.equal(messages[0].revision, 7)
 assert.match(messages[0].html, /<h1>Worker ready<\/h1>/)
+assert.equal(messages[0].outline[0].text, 'Worker ready')
+assert.equal(messages[0].outline[0].line, 1)
 console.log('Preview worker runs without a DOM')

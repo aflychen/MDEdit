@@ -58,6 +58,13 @@ export class DocumentStore {
 
   async open(path: string): Promise<OpenedDocument> {
     const document = await readDocument(path)
+    if (!this.baselines.has(path)) this.baselines.set(path, document)
+    return document
+  }
+
+  async reload(path: string): Promise<OpenedDocument> {
+    if (!this.baselines.has(path)) throw new DocumentError('NOT_OPEN', '文档尚未打开')
+    const document = await readDocument(path)
     this.baselines.set(path, document)
     return document
   }
@@ -104,4 +111,10 @@ export class DocumentStore {
   }
 
   fingerprint(path: string): string | null { return this.baselines.get(path)?.fingerprint ?? null }
+
+  has(path: string): boolean { return this.baselines.has(path) }
+
+  close(path: string): void { this.baselines.delete(path) }
+
+  closeAll(): void { this.baselines.clear() }
 }

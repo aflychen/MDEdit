@@ -3,18 +3,18 @@ import { watch, type FSWatcher } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { readLocalImage, resolveLocalResource } from './assets'
-import { DocumentError, DocumentStore, readDocument } from './document-io'
+import { DocumentAccess } from './document-access'
+import { DocumentError, readDocument } from './document-io'
+import { DocumentOperationQueue } from './document-operations'
 import { DraftStore } from './drafts'
 import type { Draft, OpenedDocument } from '../shared/contracts'
 
-const documents = new DocumentStore()
+const documents = new DocumentAccess()
 let drafts: DraftStore
 let window: BrowserWindow | null = null
-let activePath: string | null = null
-let watcher: FSWatcher | null = null
-let watchTimer: NodeJS.Timeout | null = null
-let saveQueue: Promise<unknown> = Promise.resolve()
+const watchers = new Map<string, FSWatcher>()
+const watchTimers = new Map<string, NodeJS.Timeout>()
+const documentOperations = new DocumentOperationQueue()
 let recent: string[] = []
 let closing = false
 const pendingSystemPaths = new Set<string>()
@@ -39,26 +39,36 @@ async function remember(path: string): Promise<void> {
 }
 
 function watchDocument(path: string): void {
-  watcher?.close()
-  if (watchTimer) clearTimeout(watchTimer)
+  stopWatching(path)
   try {
-    watcher = watch(path, () => {
-      if (watchTimer) clearTimeout(watchTimer)
-      watchTimer = setTimeout(async () => {
+    const watcher = watch(path, () => {
+      const previous = watchTimers.get(path)
+      if (previous) clearTimeout(previous)
+      watchTimers.set(path, setTimeout(async () => {
+        watchTimers.delete(path)
+        if (!documents.isOpen(path)) return
         try {
           const disk = await readDocument(path)
           if (disk.fingerprint !== documents.fingerprint(path)) window?.webContents.send('external-change', path)
         } catch { window?.webContents.send('external-change', path) }
-      }, 250)
+      }, 250))
     })
-  } catch { watcher = null }
+    watchers.set(path, watcher)
+  } catch { /* Saving still checks the fingerprint before replacing the file. */ }
+}
+
+function stopWatching(path: string): void {
+  watchers.get(path)?.close()
+  watchers.delete(path)
+  const timer = watchTimers.get(path)
+  if (timer) clearTimeout(timer)
+  watchTimers.delete(path)
 }
 
 async function activate(path: string): Promise<OpenedDocument> {
   const opened = await documents.open(path)
-  activePath = path
-  await remember(path)
-  watchDocument(path)
+  await remember(opened.path)
+  watchDocument(opened.path)
   return opened
 }
 
@@ -94,7 +104,11 @@ function createWindow(): void {
     event.preventDefault()
     window?.webContents.send('before-close')
   })
-  window.on('closed', () => { window = null; watcher?.close() })
+  window.on('closed', () => {
+    window = null
+    for (const path of watchers.keys()) stopWatching(path)
+    documents.closeAll()
+  })
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (devUrl) void window.loadURL(devUrl)
   else void window.loadFile(join(__dirname, '../renderer/index.html'))
@@ -134,15 +148,16 @@ register('open-system-file', async (path: string) => {
   if (!pendingSystemPaths.delete(path)) throw new DocumentError('FORBIDDEN', '文件不是系统打开请求')
   return activate(path)
 })
-register('open-relative', async (path: string) => {
-  if (!activePath) throw new DocumentError('NO_DOCUMENT', '未命名文档无法打开相对链接')
-  const target = await resolveLocalResource(activePath, path)
-  if (!/\.md$/i.test(target)) throw new DocumentError('UNSUPPORTED_LINK', '只能在编辑器中打开 Markdown 文件')
-  return activate(target)
+register('open-relative', async (basePath: string, path: string) => {
+  const opened = await documents.openRelative(basePath, path)
+  await remember(opened.path)
+  watchDocument(opened.path)
+  return opened
 })
-register('choose-save', async (text: string, format: { hasBom: boolean; lineEnding: 'lf' | 'crlf' | 'mixed' }) => {
+register('choose-save', async (text: string, format: { hasBom: boolean; lineEnding: 'lf' | 'crlf' | 'mixed' }, sourcePath: string | null) => {
+  if (sourcePath && !documents.isOpen(sourcePath)) throw new DocumentError('FORBIDDEN', '文档未打开')
   const result = await dialog.showSaveDialog(window!, {
-    defaultPath: activePath ? basename(activePath).replace(/\.md$/i, '-copy.md') : '未命名.md',
+    defaultPath: sourcePath ? basename(sourcePath).replace(/\.md$/i, '-copy.md') : '未命名.md',
     filters: [{ name: 'Markdown', extensions: ['md'] }]
   })
   if (result.canceled || !result.filePath) return null
@@ -150,20 +165,17 @@ register('choose-save', async (text: string, format: { hasBom: boolean; lineEndi
     hasBom: format.hasBom,
     lineEnding: format.lineEnding === 'mixed' ? 'lf' : format.lineEnding
   })
-  activePath = opened.path
   await remember(opened.path)
   watchDocument(opened.path)
   return opened
 })
 register('save', async (path: string, text: string, revision: number, editedAt: number, allowMixed: boolean) => {
-  if (path !== activePath) throw new DocumentError('FORBIDDEN', '只能保存当前文档')
-  const work = saveQueue.catch(() => undefined).then(async () => {
+  const result = await documentOperations.run(async () => {
+    documents.assertOpen(path)
     await drafts.write({ key: path, path, text, fingerprint: documents.fingerprint(path), revision, updatedAt: editedAt })
     return documents.save(path, text, allowMixed)
   })
-  saveQueue = work
-  const result = await work
-  watchDocument(path)
+  if (documents.isOpen(path) && window) watchDocument(path)
   return result
 })
 register('write-draft', async (draft: Draft) => {
@@ -171,6 +183,7 @@ register('write-draft', async (draft: Draft) => {
   if (typeof draft.text !== 'string' || draft.text.length > 50_000_000 || !validKey || !Number.isSafeInteger(draft.revision) || !Number.isFinite(draft.updatedAt)) {
     throw new DocumentError('INVALID_DRAFT', '草稿数据无效')
   }
+  if (draft.path) documents.assertOpen(draft.path)
   await drafts.write(draft)
 })
 register('list-drafts', async () => {
@@ -196,11 +209,19 @@ register('open-draft', async (path: string) => {
   if (!(await drafts.list()).some(draft => draft.path === path)) throw new DocumentError('FORBIDDEN', '没有该文档的恢复草稿')
   return activate(path)
 })
+register('reload-document', async (path: string) => {
+  const opened = await documentOperations.run(() => documents.reload(path))
+  if (documents.isOpen(path) && window) watchDocument(path)
+  return opened
+})
 register('delete-draft', async (key: string, expected?: { revision: number; updatedAt: number }) => drafts.delete(key, expected))
 register('recent-files', async () => recent)
-register('read-image', async (relativePath: string) => {
-  if (!activePath) throw new DocumentError('NO_DOCUMENT', '未命名文档无法读取相对图片')
-  return readLocalImage(activePath, relativePath)
+register('read-image', async (basePath: string, relativePath: string) => documents.readImage(basePath, relativePath))
+register('release-document', async (path: string) => {
+  await documentOperations.run(async () => {
+    stopWatching(path)
+    documents.close(path)
+  })
 })
 register('open-external', async (url: string) => {
   const parsed = new URL(url)

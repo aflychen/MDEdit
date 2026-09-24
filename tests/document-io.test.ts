@@ -41,6 +41,48 @@ describe('document IO', () => {
     expect(await readFile(path, 'utf8')).toBe('external')
   })
 
+  it('keeps each opened file baseline when another tab or the same file is opened', async () => {
+    const first = await fixture()
+    const second = join(paths[paths.length - 1], 'second.md')
+    await writeFile(first, 'first')
+    await writeFile(second, 'second')
+    const store = new DocumentStore()
+    await store.open(first)
+    await store.open(second)
+    await store.save(second, 'second edit')
+    await writeFile(first, 'external edit')
+    await store.open(first)
+    await expect(store.save(first, 'my edit')).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(await readFile(first, 'utf8')).toBe('external edit')
+  })
+
+  it('revokes a closed document until it is opened again', async () => {
+    const path = await fixture()
+    await writeFile(path, 'original')
+    const store = new DocumentStore()
+    await store.open(path)
+    store.close(path)
+    await expect(store.save(path, 'unauthorized')).rejects.toMatchObject({ code: 'NOT_OPEN' })
+    await store.open(path)
+    await store.save(path, 'authorized')
+    expect(await readFile(path, 'utf8')).toBe('authorized')
+  })
+
+  it('rebases only the chosen document after an explicit reload', async () => {
+    const first = await fixture()
+    const second = join(paths[paths.length - 1], 'second.md')
+    await writeFile(first, 'first')
+    await writeFile(second, 'second')
+    const store = new DocumentStore()
+    await store.open(first)
+    await store.open(second)
+    await writeFile(first, 'external first')
+    await writeFile(second, 'external second')
+    expect((await store.reload(first)).text).toBe('external first')
+    await store.save(first, 'new first')
+    await expect(store.save(second, 'new second')).rejects.toMatchObject({ code: 'CONFLICT' })
+  })
+
   it('refuses to replace a symbolic link', async () => {
     const path = await fixture()
     const target = join(paths[paths.length - 1], 'target.md')
