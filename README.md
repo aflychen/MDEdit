@@ -2,7 +2,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM 和显式语言标记的代码块高亮。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** `v0.2.1` 原始 DMG 因签名不完整已撤下。GitHub Release 现提供 `MDEdit-0.2.1-arm64-adhoc.dmg` 临时签名试用包；它未经 Developer ID 签名和 Apple 公证，Gatekeeper 不会自动放行，下载后可能无法直接打开。如系统仍提示“已损坏”，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.2.1 和 v0.3.0 提供临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行，下载后可能无法直接打开。如系统仍提示“已损坏”，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ## 开发
 
@@ -33,9 +33,9 @@ npm run dist:win
 
 ## 版本发布
 
-版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。版本不匹配、macOS 签名或公证失败时发布会失败，已发布的版本不覆盖。
+版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
 
-发布 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。发布流程会验证应用签名、Gatekeeper 评估及公证票据；缺少凭据时不会生成新 Release。
+发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
 
 例如发布补丁版本：
 

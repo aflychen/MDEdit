@@ -43,8 +43,11 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run test:worker
+      - name: Build temporary-signed macOS trial installer for v0.3.0
+        if: matrix.platform == 'macos-arm64' && github.ref_name == 'v0.3.0'
+        run: bash scripts/build-mac-adhoc.sh
       - name: Require macOS signing and notarization credentials
-        if: matrix.platform == 'macos-arm64'
+        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -60,7 +63,7 @@ jobs:
             fi
           done
       - name: Build macOS installer
-        if: matrix.platform == 'macos-arm64'
+        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0'
         run: npx electron-builder --mac dmg --arm64 --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -69,7 +72,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - name: Verify macOS signature and notarization
-        if: matrix.platform == 'macos-arm64'
+        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0'
         run: |
           codesign --verify --deep --strict --verbose=2 dist/mac-arm64/MDEdit.app
           spctl --assess --type execute --verbose=4 dist/mac-arm64/MDEdit.app
