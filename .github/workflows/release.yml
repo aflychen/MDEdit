@@ -43,11 +43,37 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run test:worker
+      - name: Require macOS signing and notarization credentials
+        if: matrix.platform == 'macos-arm64'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing macOS release credential: $name" >&2
+              exit 1
+            fi
+          done
       - name: Build macOS installer
         if: matrix.platform == 'macos-arm64'
         run: npx electron-builder --mac dmg --arm64 --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Verify macOS signature and notarization
+        if: matrix.platform == 'macos-arm64'
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/mac-arm64/MDEdit.app
+          spctl --assess --type execute --verbose=4 dist/mac-arm64/MDEdit.app
+          xcrun stapler validate dist/mac-arm64/MDEdit.app
       - name: Build Windows installer
         if: matrix.platform == 'windows-x64'
         run: npx electron-builder --win nsis --x64 --publish never

@@ -18,7 +18,7 @@
     "appId": "dev.mdedit.app",
     "productName": "MDEdit",
     "files": ["out/**/*", "package.json"],
-    "mac": {"icon": "assets/icon.icns", "category": "public.app-category.productivity", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]},
+    "mac": {"icon": "assets/icon.icns", "category": "public.app-category.productivity", "hardenedRuntime": true, "entitlements": "build/entitlements.mac.plist", "entitlementsInherit": "build/entitlements.mac.plist", "notarize": true, "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]},
     "win": {"icon": "assets/icon.ico", "target": "nsis", "fileAssociations": [{"ext": "md", "name": "Markdown Document", "role": "Editor"}]}
   },
   "dependencies": {

@@ -2,6 +2,8 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM 和显式语言标记的代码块高亮。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
+**已知问题：** `v0.2.1` 的 macOS DMG 中，应用缺少完整签名，打开时可能提示“已损坏”。该版本的下载校验值正确，重新下载无法修复；请等待完成 Developer ID 签名和 Apple 公证的新版本。
+
 ## 开发
 
 需要 Node.js 20.19+（或 22.12+）和 npm。
@@ -27,11 +29,13 @@ npm run dist:mac
 npm run dist:win
 ```
 
-`dist:mac` 和 `dist:win` 应分别在目标系统上运行。未签名的 macOS 包只适合本地开发验证；对外分发需要完成签名与公证。
+`dist:mac` 和 `dist:win` 应分别在目标系统上运行。未签名的 macOS 包只适合本地开发验证；对外分发需要 Developer ID Application 签名与 Apple 公证。
 
 ## 版本发布
 
-版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。版本不匹配时发布会失败，已发布的版本不覆盖。
+版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。版本不匹配、macOS 签名或公证失败时发布会失败，已发布的版本不覆盖。
+
+发布 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。发布流程会验证应用签名、Gatekeeper 评估及公证票据；缺少凭据时不会生成新 Release。
 
 例如发布补丁版本：
 
