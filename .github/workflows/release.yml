@@ -108,8 +108,13 @@ jobs:
       - name: Generate checksums
         shell: bash
         run: |
+          for file in release-assets/*.exe; do
+            [ -e "$file" ] || continue
+            renamed="${file// /.}"
+            if [ "$file" != "$renamed" ]; then mv "$file" "$renamed"; fi
+          done
           cd release-assets
-          sha256sum ./* > SHA256SUMS
+          sha256sum * > SHA256SUMS
       - name: Create versioned GitHub Release
         shell: bash
         env:
