@@ -2,7 +2,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM 和显式语言标记的代码块高亮。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**已知问题：** `v0.2.1` 的 macOS DMG 缺少有效的完整签名，打开时会提示“已损坏”。该 DMG 已从 GitHub Release 撤下；其余安装包和校验文件仅包含 Windows 安装程序。macOS 用户请使用本机源码构建版，或等待完成 Developer ID 签名和 Apple 公证的新版本。
+**macOS 特别说明：** `v0.2.1` 原始 DMG 因签名不完整已撤下。GitHub Release 现提供 `MDEdit-0.2.1-arm64-adhoc.dmg` 临时签名试用包；它未经 Developer ID 签名和 Apple 公证，Gatekeeper 不会自动放行，下载后可能无法直接打开。如系统仍提示“已损坏”，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ## 开发
 
