@@ -8,9 +8,10 @@ export default defineConfig({
   renderer: {
     plugins: [react()],
     resolve: {
-      // The package's browser export uses document; the worker has no DOM.
+      // These browser exports require DOM APIs, which the preview worker lacks.
       alias: {
-        'decode-named-character-reference': fileURLToPath(new URL('./node_modules/decode-named-character-reference/index.js', import.meta.url))
+        'decode-named-character-reference': fileURLToPath(new URL('./node_modules/decode-named-character-reference/index.js', import.meta.url)),
+        'hast-util-from-html-isomorphic': fileURLToPath(new URL('./node_modules/hast-util-from-html-isomorphic/index.js', import.meta.url))
       }
     }
   }
