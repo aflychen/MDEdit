@@ -11,7 +11,16 @@ function showDiagramError(target: HTMLElement, source: string, error: unknown): 
   target.replaceWith(wrapper)
 }
 
-export async function renderMermaidBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean): Promise<void> {
+let renderQueue: Promise<void> = Promise.resolve()
+
+export function renderMermaidBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean): Promise<void> {
+  const current = renderQueue.then(() => renderBlocks(root, theme, isActive))
+  renderQueue = current.catch(() => undefined)
+  return current
+}
+
+async function renderBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean): Promise<void> {
+  if (!isActive()) return
   const blocks = Array.from(root.querySelectorAll<HTMLElement>('pre')).filter(block => block.querySelector('code.language-mermaid'))
   if (!blocks.length) return
   let mermaid: (typeof import('mermaid'))['default']

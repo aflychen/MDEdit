@@ -8,6 +8,7 @@ import { DocumentError, readDocument } from './document-io'
 import { DocumentOperationQueue } from './document-operations'
 import { DraftStore } from './drafts'
 import { WorkspaceFolder } from './workspace-folder'
+import { exportDocument, type ExportFormat } from './export-document'
 import type { Draft, ImageImport, OpenedDocument } from '../shared/contracts'
 
 const documents = new DocumentAccess()
@@ -185,6 +186,7 @@ register('choose-save', async (text: string, format: { hasBom: boolean; lineEndi
   watchDocument(opened.path)
   return opened
 })
+register('export-document', async (format: ExportFormat, title: string, body: string) => exportDocument(window!, format, title, body))
 register('save', async (path: string, text: string, revision: number, editedAt: number, allowMixed: boolean) => {
   const result = await documentOperations.run(async () => {
     documents.assertOpen(path)

@@ -47,6 +47,7 @@ export interface WorkspaceSearchResponse {
 }
 
 export interface DesktopApi {
+  exportDocument(format: 'html' | 'pdf', title: string, body: string): Promise<string | null>
   chooseWorkspaceFolder(): Promise<string | null>
   listWorkspaceDirectory(path: string): Promise<WorkspaceEntry[]>
   openWorkspaceDocument(path: string): Promise<OpenedDocument>

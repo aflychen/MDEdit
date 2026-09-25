@@ -1,12 +1,12 @@
 {
   "name": "mdedit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "A local Markdown editor",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && node scripts/copy-export-assets.mjs",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

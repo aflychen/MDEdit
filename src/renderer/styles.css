@@ -4,7 +4,7 @@ html, body, #root { margin: 0; width: 100%; height: 100%; }
 button { font: inherit; cursor: pointer; border: 0; background: transparent; color: inherit; }
 button:disabled { cursor: wait; opacity: .55; }
 .app-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 680px; position: relative; }
-.topbar { min-height: 66px; display: flex; align-items: center; gap: 28px; padding: 0 25px; border-bottom: 1px solid #e3e7ec; background: #fff; -webkit-app-region: drag; }
+.topbar { min-height: 66px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; padding: 10px 25px; border-bottom: 1px solid #e3e7ec; background: #fff; -webkit-app-region: drag; }
 .topbar button, .topbar .document-title { -webkit-app-region: no-drag; }
 .brand { display: flex; align-items: center; gap: 9px; flex: 0 0 160px; font-weight: 700; font-size: 17px; letter-spacing: -.04em; color: #17202c; }
 .brand-mark { display: block; width: 32px; height: 32px; flex: none; }
@@ -13,7 +13,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .save-status { display: flex; align-items: center; gap: 6px; color: #7c8795; font-size: 11px; }
 .save-status i { width: 6px; height: 6px; background: #a6afba; border-radius: 50%; }
 .status-saved i { background: #39a879; }.status-saving i, .status-editing i { background: #dfa845; }.status-error i, .status-conflict i { background: #d96158; }
-.top-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.top-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 .top-actions button { padding: 9px 13px; border-radius: 7px; font-size: 12px; font-weight: 600; color: #566273; }
 .top-actions button:hover, .toolbar button:hover { background: #f1f3f8; color: #1d2d42; }
 .top-actions .primary { color: #fff; background: #253cdb; box-shadow: 0 2px 6px #253cdb24; }

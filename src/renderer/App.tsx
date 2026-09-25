@@ -157,6 +157,21 @@ export default function App() {
     } finally { endOperation() }
   }, [backup, beginOperation, endOperation, getSession, update])
 
+  const exportCurrent = useCallback(async (format: 'html' | 'pdf') => {
+    const id = workspaceRef.current.activeId
+    if (!beginOperation(id)) return
+    try {
+      const current = getSession(id)
+      if (!current) return
+      const { buildExportBody } = await import('./export-content')
+      const body = await buildExportBody(current.text, current.path)
+      const target = await window.mdedit.exportDocument(format, documentName(current.path), body)
+      if (target) setNotice(`已导出到 ${target}`)
+    } catch (error) {
+      setNotice(`导出 ${format.toUpperCase()} 失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally { endOperation() }
+  }, [beginOperation, endOperation, getSession])
+
   const importImages = useCallback(async (files: File[], view: EditorView, from: number, to: number) => {
     const id = editorId.current
     if (id === null || operationLock.current || files.length === 0) return
@@ -673,7 +688,7 @@ export default function App() {
     <header className="topbar">
       <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
       <div className="document-title"><strong>{documentName(session.path)}</strong><span className={`save-status status-${session.saveState}`}><i />{statusLabel(session)}</span></div>
-      <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void chooseFolder()}>打开文件夹</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button></div>
+      <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void chooseFolder()}>打开文件夹</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button><button disabled={busy} onClick={() => void exportCurrent('html')}>导出 HTML</button><button disabled={busy} onClick={() => void exportCurrent('pdf')}>导出 PDF</button></div>
     </header>
     <nav className="tabbar" aria-label="文档标签"><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
       <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? '未命名文档'} · ${statusLabel(tab)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path)}</span></button>
