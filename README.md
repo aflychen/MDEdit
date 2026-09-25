@@ -1,10 +1,14 @@
+[简体中文](#简体中文) | [English](#english)
+
 # MDEdit
+
+## 简体中文
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
 **macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用 v0.5.1。v0.5.1 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
-## 开发
+### 开发
 
 需要 Node.js 20.19+（或 22.12+）和 npm。
 
@@ -21,7 +25,7 @@ npm run test:worker
 
 `test:worker` 会先构建，再在无 DOM 环境执行实际生成的预览 Worker，用于防止依赖解析到只适用于页面的入口。
 
-## 构建
+### 构建
 
 ```bash
 npm run build
@@ -31,7 +35,7 @@ npm run dist:win
 
 `dist:mac` 和 `dist:win` 应分别在目标系统上运行。未签名的 macOS 包只适合本地开发验证；对外分发需要 Developer ID Application 签名与 Apple 公证。
 
-## 版本发布
+### 版本发布
 
 版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0、v0.4.0、v0.5.0 和 v0.5.1 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
 
@@ -47,7 +51,7 @@ git push origin HEAD
 git push origin vX.Y.Z
 ```
 
-## 使用
+### 使用
 
 - `Cmd/Ctrl+O` 打开 `.md`，`Cmd/Ctrl+N` 新建。
 - 多个文档以标签打开；`Cmd/Ctrl+Tab` 和 `Cmd/Ctrl+Shift+Tab` 切换标签，`Cmd/Ctrl+W` 关闭当前标签。焦点在标签上时也可用左右方向键、Home、End 导航。同一路径再次打开时会聚焦已有标签。
@@ -74,7 +78,7 @@ A local Markdown editor for macOS and Windows. Source editing is powered by Code
 
 **macOS notice:** The macOS installer in v0.5.0 fails to launch; use v0.5.1 instead. The v0.5.1 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
-### Development
+## Development
 
 Requires Node.js 20.19+ (or 22.12+) and npm.
 
@@ -91,7 +95,7 @@ npm run test:worker
 
 `test:worker` builds the app first, then runs the generated preview Worker in an environment without a DOM. This helps ensure that the Worker does not resolve to an entry point intended only for a browser page.
 
-### Build
+## Build
 
 ```bash
 npm run build
@@ -101,7 +105,7 @@ npm run dist:win
 
 Run `dist:mac` and `dist:win` on their respective target operating systems. Unsigned macOS packages are suitable only for local development checks. Distribution requires Developer ID Application signing and Apple notarization.
 
-### Releases
+## Releases
 
 The version is recorded in `package.json` and `package-lock.json`; Git tags use the `vX.Y.Z` format. To release a new version, update the version and `docs/releases/vX.Y.Z.md`, commit the changes, then create and push a tag with the same version. The tag triggers the [Release workflow](.github/workflows/release.yml), which runs tests and builds an installer on macOS and Windows, calculates SHA-256 checksums, and attaches the installers to the corresponding GitHub Release. v0.3.0, v0.4.0, v0.5.0, and v0.5.1 explicitly use ad hoc signed trial builds. Future releases still require proper macOS signing and notarization. A release fails if the version does not match or a build check fails; published releases are not overwritten.
 
@@ -117,7 +121,7 @@ git push origin HEAD
 git push origin vX.Y.Z
 ```
 
-### Usage
+## Usage
 
 - `Cmd/Ctrl+O` opens a `.md` file; `Cmd/Ctrl+N` creates a new document.
 - Open multiple documents in tabs. Use `Cmd/Ctrl+Tab` and `Cmd/Ctrl+Shift+Tab` to switch tabs, and `Cmd/Ctrl+W` to close the current tab. When a tab is focused, the arrow keys, Home, and End also navigate the tabs. Opening a path that is already open focuses its existing tab.
