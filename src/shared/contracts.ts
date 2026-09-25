@@ -22,6 +22,7 @@ export interface Draft {
 
 export interface SaveResult { fingerprint: string; modifiedAt: number }
 export interface AppError { code: string; message: string }
+export interface ImageImport { bytes: Uint8Array }
 
 export interface WorkspaceEntry {
   name: string
@@ -64,6 +65,7 @@ export interface DesktopApi {
   deleteDraft(key: string, expected?: { revision: number; updatedAt: number }): Promise<void>
   recentFiles(): Promise<string[]>
   readImage(basePath: string, relativePath: string): Promise<string>
+  importImages(basePath: string, images: ImageImport[]): Promise<string[]>
   releaseDocument(path: string): Promise<void>
   openExternal(url: string): Promise<void>
   onOpenFile(callback: (path: string) => void): () => void

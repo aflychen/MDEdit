@@ -1,8 +1,10 @@
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import { all as highlightLanguages } from 'lowlight'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
@@ -81,17 +83,19 @@ function constrainImages() {
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
+  .use(remarkMath)
   .use(remarkRehype)
-  .use(rehypeHighlight, { detect: false, languages: highlightLanguages })
+  .use(rehypeHighlight, { detect: false, languages: highlightLanguages, plainText: ['math', 'mermaid'] })
   .use(rehypeSanitize, {
     ...defaultSchema,
     attributes: {
       ...defaultSchema.attributes,
-      code: [...(defaultSchema.attributes?.code ?? []), ['className', 'hljs']],
+      code: [...(defaultSchema.attributes?.code ?? []), ['className', 'hljs', 'math-inline', 'math-display']],
       span: [...(defaultSchema.attributes?.span ?? []), ['className', /^hljs-[a-z][a-z0-9_-]*$/]]
     }
   })
   .use(constrainImages)
+  .use(rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 })
   .use(rehypeStringify)
 
 export function renderMarkdown(text: string): string {

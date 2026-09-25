@@ -8,7 +8,7 @@ import { DocumentError, readDocument } from './document-io'
 import { DocumentOperationQueue } from './document-operations'
 import { DraftStore } from './drafts'
 import { WorkspaceFolder } from './workspace-folder'
-import type { Draft, OpenedDocument } from '../shared/contracts'
+import type { Draft, ImageImport, OpenedDocument } from '../shared/contracts'
 
 const documents = new DocumentAccess()
 const workspaceFolder = new WorkspaceFolder()
@@ -233,6 +233,7 @@ register('reload-document', async (path: string) => {
 register('delete-draft', async (key: string, expected?: { revision: number; updatedAt: number }) => drafts.delete(key, expected))
 register('recent-files', async () => recent)
 register('read-image', async (basePath: string, relativePath: string) => documents.readImage(basePath, relativePath))
+register('import-images', async (basePath: string, images: ImageImport[]) => documentOperations.run(() => documents.importImages(basePath, images)))
 register('release-document', async (path: string) => {
   await documentOperations.run(async () => {
     stopWatching(path)

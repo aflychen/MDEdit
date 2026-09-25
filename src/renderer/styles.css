@@ -41,6 +41,13 @@ button:disabled { cursor: wait; opacity: .55; }
 .preview-content a { color: #2943d6; text-decoration: none; border-bottom: 1px solid #aebbf7; }.preview-content a:hover { border-color: currentColor; }
 .preview-content code { background: #f0f2f6; color: #d04c67; padding: 2px 5px; border-radius: 4px; font: 12px 'DM Mono', monospace; }.preview-content pre { background: #f3f5f8; border: 1px solid #e8ecf1; border-radius: 8px; padding: 15px 18px; overflow-x: auto; line-height: 1.6; }.preview-content pre code { background: transparent; color: #2d3c4d; padding: 0; }.preview-content blockquote { border-left: 3px solid #a9b5ea; margin: 20px 0; padding: 1px 17px; color: #697787; background: #f8f9fd; }.preview-content table { border-collapse: collapse; width: 100%; margin: 18px 0; }.preview-content th, .preview-content td { border: 1px solid #dfe4eb; padding: 7px 11px; }.preview-content th { background: #f5f7fa; text-align: left; }.preview-content img { max-width: 100%; border-radius: 6px; }.preview-content hr { border: 0; border-top: 1px solid #e2e6ec; margin: 30px 0; }.preview-content ul { padding-left: 25px; }.preview-content input[type=checkbox] { accent-color: #344fdb; }
 .image-placeholder, .preview-error { display: inline-block; color: #897657; background: #fbf7ed; border: 1px solid #eee2c9; border-radius: 5px; padding: 4px 8px; font-size: 12px; }.preview-error { margin: 24px; }
+.preview-content .mermaid { overflow-x: auto; text-align: center; margin: 20px 0; }
+.preview-content .mermaid svg { max-width: 100%; height: auto; }
+.preview-content .mermaid-error { margin: 20px 0; color: #a44942; }
+.preview-content .mermaid-error > span { display: block; padding: 5px 8px; background: #fff1ef; border-radius: 5px; }
+.preview-content .mermaid-error pre { margin-top: 6px; }
+.preview-content .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.preview-content .katex-error { color: #b14544; }
 .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 31px; padding: 0 19px; border-top: 1px solid #e2e6ec; color: #8c98a7; background: #fbfcfd; font: 10px 'DM Mono', monospace; white-space: nowrap; }.statusbar > span { overflow: hidden; text-overflow: ellipsis; }.statusbar > div { display: flex; gap: 20px; }
 .recent-menu { position: absolute; bottom: 40px; right: 18px; z-index: 4; font-size: 11px; }.recent-menu summary { cursor: pointer; padding: 7px 10px; border: 1px solid #dce2eb; border-radius: 6px; background: #fff; color: #667489; list-style: none; box-shadow: 0 2px 8px #1829460d; }.recent-menu details[open] > div { position: absolute; right: 0; bottom: 38px; width: 280px; max-height: 300px; overflow: auto; background: #fff; border: 1px solid #dce2eb; border-radius: 8px; box-shadow: 0 10px 30px #1829461f; padding: 5px; }.recent-menu button { display: block; width: 100%; text-align: left; padding: 8px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; }.recent-menu button:hover { background: #f4f6fb; }.recent-menu small { display: block; color: #9ba6b3; font: 10px 'DM Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
 @media (max-width: 1050px) { .brand { flex-basis: auto; }.topbar { gap: 15px; }.preview-content { padding: 23px; } }
@@ -155,6 +162,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .notice-conflict { color: #f3aaa5; background: #4b2c31; border-color: #75434b; }
 :root[data-theme="dark"] .recovery-strip { color: #c4ceff; background: #303c69; border-color: #4e5c9d; }
 :root[data-theme="dark"] .image-placeholder, :root[data-theme="dark"] .preview-error { color: #e0caa5; background: #463a2a; border-color: #69543a; }
+:root[data-theme="dark"] .preview-content .mermaid-error, :root[data-theme="dark"] .preview-content .katex-error { color: #f1a9a4; }
+:root[data-theme="dark"] .preview-content .mermaid-error > span { background: #492c32; }
 :root[data-theme="dark"] .preview-content .hljs-comment, :root[data-theme="dark"] .preview-content .hljs-quote { color: #9da9ba; }
 :root[data-theme="dark"] .preview-content .hljs-keyword, :root[data-theme="dark"] .preview-content .hljs-selector-tag, :root[data-theme="dark"] .preview-content .hljs-literal { color: #c7a7ff; }
 :root[data-theme="dark"] .preview-content .hljs-string, :root[data-theme="dark"] .preview-content .hljs-regexp, :root[data-theme="dark"] .preview-content .hljs-addition { color: #9bd5b0; }

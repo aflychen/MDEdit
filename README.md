@@ -1,8 +1,8 @@
 # MDEdit
 
-面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM 和显式语言标记的代码块高亮。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
+面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.2.1 和 v0.3.0 提供临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行，下载后可能无法直接打开。如系统仍提示“已损坏”，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.2.1、v0.3.0 和 v0.4.0 提供临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行，下载后可能无法直接打开。如系统仍提示“已损坏”，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ## 开发
 
@@ -33,9 +33,9 @@ npm run dist:win
 
 ## 版本发布
 
-版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
+版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0 和 v0.4.0 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
 
-发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
+发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0 和 v0.4.0 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
 
 例如发布补丁版本：
 
@@ -59,6 +59,8 @@ git push origin vX.Y.Z
 - 外观可选择跟随系统、浅色或深色；手动选择会保存在本机。
 - 左侧目录根据当前文档的 H1～H6 实时生成；点击标题可跳转。编辑区与预览区按标题同步定位，预览代码块可一键复制。
 - 围栏代码块根据显式语言标记高亮；未标记或无法识别的语言显示普通代码文本。
+- 在编辑区粘贴或拖入 PNG、JPEG、GIF、WebP、AVIF 图片时，图片会存入文档同级的 `images/` 目录并插入相对路径；未命名文档先选择保存位置。单张图片上限 10 MiB，每次最多 20 张且总量不超过 50 MiB。
+- 使用 `mermaid` 围栏代码块预览图表；使用 `$...$` 和 `$$...$$` 预览行内与块级公式。语法错误只显示在对应图表或公式处。
 - 各标签的已命名文档停止输入约 2 秒后自动保存；未命名文档只保存恢复草稿。关闭仍有未保存内容的标签前会先备份恢复草稿。
 
 文件夹访问基于本次会话中通过系统对话框选择的目录；文件树与搜索拒绝静态符号链接及越界路径。若同机进程在读写期间持续替换目录，仍存在路径竞态，不能将此机制视为对恶意本地进程的隔离。本地图片只允许位于对应文档的目录及子目录。远程图片默认不加载。文档被其他程序修改时，应用会停止覆盖并提供重新载入或另存副本。后续功能范围见 [迭代规划](docs/roadmap.md)。

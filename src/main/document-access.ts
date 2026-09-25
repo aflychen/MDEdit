@@ -1,6 +1,6 @@
 import { lstat, realpath } from 'node:fs/promises'
-import type { OpenedDocument, SaveResult } from '../shared/contracts'
-import { readLocalImage, resolveLocalResource } from './assets'
+import type { ImageImport, OpenedDocument, SaveResult } from '../shared/contracts'
+import { importLocalImages, readLocalImage, resolveLocalResource } from './assets'
 import { DocumentError, DocumentStore } from './document-io'
 
 export class DocumentAccess {
@@ -43,6 +43,11 @@ export class DocumentAccess {
   async readImage(basePath: string, relativePath: string): Promise<string> {
     this.assertOpen(basePath)
     return readLocalImage(basePath, relativePath)
+  }
+
+  async importImages(basePath: string, images: ImageImport[]): Promise<string[]> {
+    this.assertOpen(basePath)
+    return importLocalImages(basePath, images)
   }
 
   async save(path: string, text: string, allowMixed = false): Promise<SaveResult> {

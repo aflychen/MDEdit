@@ -26,6 +26,7 @@ const api: DesktopApi = {
   deleteDraft: (key, expected) => invoke('delete-draft', key, expected),
   recentFiles: () => invoke('recent-files'),
   readImage: (basePath, relativePath) => invoke('read-image', basePath, relativePath),
+  importImages: (basePath, images) => invoke('import-images', basePath, images),
   releaseDocument: path => invoke('release-document', path),
   openExternal: url => invoke('open-external', url),
   onOpenFile: callback => {

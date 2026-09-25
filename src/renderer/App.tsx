@@ -15,11 +15,15 @@ import WorkspaceSidebar from './WorkspaceSidebar'
 import { editorTheme } from './editor-theme'
 import { parseThemePreference, resolveTheme, type ThemePreference } from './theme'
 import { searchResultPosition } from './search-navigation'
+import { renderMermaidBlocks } from './mermaid-preview'
+import { imageExtension } from '../shared/image-format'
 
 const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
 const statusLabel = (session: DocumentSession) => ({ editing: '编辑中', saving: '正在保存', saved: '已保存', error: '保存失败', conflict: '磁盘冲突' })[session.saveState]
 const needsBackup = (session: DocumentSession) => session.revision !== session.persistedRevision || session.saveState === 'conflict' || session.saveState === 'error'
 const draftFor = (session: DocumentSession): Draft => ({ key: session.draftKey, path: session.path, text: session.text, fingerprint: session.diskFingerprint, revision: session.revision, updatedAt: session.editedAt })
+const isImageFile = (file: File) => file.type.startsWith('image/') || /\.(?:png|jpe?g|gif|webp|avif)$/i.test(file.name)
+const imageAlt = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[\[\]\\\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || '图片'
 interface PreviewSnapshot { sessionId: number; revision: number; html?: string; outline?: OutlineHeading[]; words?: number; error?: string }
 interface EditorSnapshot { state: EditorState; top: number; left: number }
 
@@ -152,6 +156,37 @@ export default function App() {
       return false
     } finally { endOperation() }
   }, [backup, beginOperation, endOperation, getSession, update])
+
+  const importImages = useCallback(async (files: File[], view: EditorView, from: number, to: number) => {
+    const id = editorId.current
+    if (id === null || operationLock.current || files.length === 0) return
+    if (files.length > 20 || files.some(file => !file.size || file.size > 10 * 1024 * 1024) || files.reduce((total, file) => total + file.size, 0) > 50 * 1024 * 1024) {
+      setNotice('一次最多导入 20 张图片；单张不超过 10 MB，总量不超过 50 MB。')
+      return
+    }
+    if (!beginOperation(id)) return
+    let images: { bytes: Uint8Array }[]
+    try {
+      images = await Promise.all(files.map(async file => ({ bytes: new Uint8Array(await file.arrayBuffer()) })))
+      if (images.some(image => !imageExtension(image.bytes))) throw new Error('仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片')
+    } catch (error) {
+      setNotice(`导入图片失败：${error instanceof Error ? error.message : String(error)}`)
+      return
+    } finally { endOperation() }
+    if (!getSession(id)?.path && !(await saveAs(id))) return
+    if (!beginOperation(id)) return
+    try {
+      const current = getSession(id)
+      if (!current?.path || editor.current !== view || editorId.current !== id) return
+      const paths = await window.mdedit.importImages(current.path, images)
+      const markdown = paths.map((path, index) => `![${imageAlt(files[index].name)}](${path})`).join('\n')
+      view.dispatch({ changes: { from, to, insert: markdown }, selection: { anchor: from + markdown.length } })
+      setNotice(null)
+      view.focus()
+    } catch (error) {
+      setNotice(`导入图片失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally { endOperation() }
+  }, [beginOperation, endOperation, getSession, saveAs])
 
   const saveNow = useCallback(async function saveDocument(id: number, manual = false): Promise<boolean> {
     if (lockedId.current === id || lockedId.current === -1) return false
@@ -409,6 +444,20 @@ export default function App() {
         const position = view.lineBlockAtHeight(Math.max(0, view.scrollDOM.scrollTop)).from
         syncPreviewToLine(view.state.doc.lineAt(position).number)
         requestAnimationFrame(() => { scrollGuard.current = false })
+      }, paste: (event, view) => {
+        const files = Array.from(event.clipboardData?.files ?? []).filter(isImageFile)
+        if (!files.length || operationLock.current) return false
+        event.preventDefault()
+        const { from, to } = view.state.selection.main
+        void importImages(files, view, from, to)
+        return true
+      }, drop: (event, view) => {
+        const files = Array.from(event.dataTransfer?.files ?? []).filter(isImageFile)
+        if (!files.length || operationLock.current) return false
+        event.preventDefault()
+        const position = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head
+        void importImages(files, view, position, position)
+        return true
       } })
     ]
     const active = workspaceRef.current.tabs.find(tab => tab.id === workspaceRef.current.activeId)!
@@ -416,7 +465,7 @@ export default function App() {
     const view = new EditorView({ state: EditorState.create({ doc: active.text, extensions: editorExtensions.current }), parent: editorHost.current })
     editor.current = view
     return () => { editor.current = null; editorId.current = null; view.destroy() }
-  }, [syncPreviewToLine, update, wrapSelection])
+  }, [importImages, syncPreviewToLine, update, wrapSelection])
   useLayoutEffect(() => {
     const view = editor.current
     if (!view || editorId.current === session.id) return
@@ -485,7 +534,7 @@ export default function App() {
     scrollGuard.current = true
     root.scrollTop = previewPositions.current.get(session.id) ?? 0
     requestAnimationFrame(() => { scrollGuard.current = false })
-  }, [session.id, previewVisible, lastPreview?.html])
+  }, [session.id, previewVisible, lastPreview?.html, resolvedTheme])
   useEffect(() => {
     const root = previewHost.current
     if (!root) return
@@ -508,7 +557,16 @@ export default function App() {
       })
     }
     return () => { active = false }
-  }, [lastPreview?.html, session.id, session.path, previewVisible])
+  }, [lastPreview?.html, session.id, session.path, previewVisible, resolvedTheme])
+  useEffect(() => {
+    const root = previewHost.current
+    if (!root) return
+    let active = true
+    void renderMermaidBlocks(root, resolvedTheme, () => active).catch(error => {
+      if (active) setNotice(`图表预览失败：${error instanceof Error ? error.message : String(error)}`)
+    })
+    return () => { active = false }
+  }, [lastPreview?.html, session.id, previewVisible, resolvedTheme])
   useEffect(() => {
     void window.mdedit.recentFiles().then(setRecent)
     void window.mdedit.listDrafts().then(setDrafts)
@@ -629,7 +687,7 @@ export default function App() {
     <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
       {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={preview?.outline} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
       <section className="editor-pane" id="document-editor"><div className="pane-label">编辑器 <span>MARKDOWN</span></div><div className="editor-host" ref={editorHost} /></section>
-      {previewVisible && <section className="preview-pane"><div className="pane-label">实时预览 <span>{preview ? 'PREVIEW' : '更新中'}</span></div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={session.id} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll} dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} />}</section>}
+      {previewVisible && <section className="preview-pane"><div className="pane-label">实时预览 <span>{preview ? 'PREVIEW' : '更新中'}</span></div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll} dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} />}</section>}
     </main>
     <footer className="statusbar"><span>{session.path ?? '本地草稿 · 尚未指定文件'}</span><div><span>{preview?.words ?? '…'} 字</span><span>第 {cursor.line} 行，第 {cursor.column} 列</span><span>UTF-8 · {session.lineEnding.toUpperCase()}</span></div></footer>
     {recent.length > 0 && <aside className="recent-menu"><details><summary>最近文件</summary><div>{recent.map(path => <button disabled={busy} key={path} onClick={() => void openDocument(() => window.mdedit.openRecent(path))}>{documentName(path)}<small>{path}</small></button>)}</div></details></aside>}
