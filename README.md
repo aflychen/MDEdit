@@ -1,6 +1,8 @@
-[简体中文](#简体中文) | [English](#english)
+[简体中文](#user-content-readme-chinese) | [English](#user-content-readme-english)
 
 # MDEdit
+
+<a name="readme-chinese"></a>
 
 ## 简体中文
 
@@ -71,6 +73,8 @@ git push origin vX.Y.Z
 文件夹访问基于本次会话中通过系统对话框选择的目录；文件树与搜索拒绝静态符号链接及越界路径。若同机进程在读写期间持续替换目录，仍存在路径竞态，不能将此机制视为对恶意本地进程的隔离。本地图片只允许位于对应文档的目录及子目录。远程图片默认不加载。文档被其他程序修改时，应用会停止覆盖并提供重新载入或另存副本。后续功能范围见 [迭代规划](docs/roadmap.md)。
 
 产品与安全边界见 [设计文档](docs/superpowers/specs/2026-09-23-markdown-editor-design.md)。
+
+<a name="readme-english"></a>
 
 ## English
 
