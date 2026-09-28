@@ -39,17 +39,19 @@ npm run dist:win
 
 ### 版本发布
 
-版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0、v0.4.0、v0.5.0、v0.5.1 和 v0.6.0 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
+版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。每次完成应用代码变更并通过测试后，按项目级 [交付流程](AGENTS.md) 提交、推送、合入 `main` 并发布新版本，无须另行提醒。只修改文档或开发流程时不占用应用版本。标签必须指向已合入 `main` 的提交；推送标签后触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到公开的 GitHub Release。macOS 包使用临时签名脚本构建，未经 Apple 公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
 
-发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0、v0.4.0、v0.5.0、v0.5.1 和 v0.6.0 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
+临时签名流程会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。公开 GitHub Release 不等于已获得 Apple 签名与公证；如需可直接打开的 macOS 安装包，仍需另行配置 Developer ID 签名与公证。
 
 例如发布补丁版本：
 
 ```bash
 npm version patch --no-git-tag-version
-# 编辑 docs/releases/vX.Y.Z.md，然后提交变更
+# 若此版本已分配给后续里程碑，先在 roadmap 中调整该里程碑版本
+# 编辑 docs/releases/vX.Y.Z.md，测试、提交、推送并合入 main
+git switch main
+git pull --ff-only origin main
 git tag -a vX.Y.Z -m "MDEdit vX.Y.Z"
-git push origin HEAD
 git push origin vX.Y.Z
 ```
 
@@ -113,17 +115,19 @@ Run `dist:mac` and `dist:win` on their respective target operating systems. An a
 
 ## Releases
 
-The version is recorded in `package.json` and `package-lock.json`; Git tags use the `vX.Y.Z` format. To release a new version, update the version and `docs/releases/vX.Y.Z.md`, commit the changes, then create and push a tag with the same version. The tag triggers the [Release workflow](.github/workflows/release.yml), which runs tests and builds an installer on macOS and Windows, calculates SHA-256 checksums, and attaches the installers to the corresponding GitHub Release. v0.3.0, v0.4.0, v0.5.0, v0.5.1, and v0.6.0 explicitly use ad hoc signed trial builds. Future releases still require proper macOS signing and notarization. A release fails if the version does not match or a build check fails; published releases are not overwritten.
+The version is recorded in `package.json` and `package-lock.json`; Git tags use the `vX.Y.Z` format. After each tested application code change, follow the project-wide [delivery workflow](AGENTS.md) to commit, push, integrate into `main`, and publish a version without a separate reminder. Documentation-only and process-only changes do not consume an app version. The tag must point to a commit already integrated into `main`. Pushing it triggers the [Release workflow](.github/workflows/release.yml), which tests and builds on macOS and Windows, calculates SHA-256 checksums, and attaches the installers to a public GitHub Release. The macOS installer is built with ad hoc signing and is not Apple notarized. A release fails if the version does not match or a build check fails; published releases are not overwritten.
 
-Before releasing a properly signed macOS installer, configure these GitHub Actions secrets: `MAC_CSC_LINK` (Base64-encoded Developer ID Application `.p12`), `MAC_CSC_KEY_PASSWORD` (certificate export password), `APPLE_ID` (Apple developer account), `APPLE_APP_SPECIFIC_PASSWORD` (app-specific password), and `APPLE_TEAM_ID`. Do not commit certificates or passwords to the repository. The ad hoc signing exceptions for v0.3.0, v0.4.0, v0.5.0, v0.5.1, and v0.6.0 verify the app signature and DMG integrity, but do not pass Gatekeeper or notarization checks.
+The ad hoc signing flow verifies the app signature and DMG integrity, but does not pass Gatekeeper or notarization checks. A public GitHub Release does not imply Apple signing or notarization; distributing a macOS installer that opens directly still requires a separate Developer ID signing and notarization setup.
 
 For example, to release a patch version:
 
 ```bash
 npm version patch --no-git-tag-version
-# Edit docs/releases/vX.Y.Z.md, then commit the changes
+# If this version is assigned to a later milestone, move that milestone in the roadmap first.
+# Edit docs/releases/vX.Y.Z.md, test, commit, push, and integrate into main
+git switch main
+git pull --ff-only origin main
 git tag -a vX.Y.Z -m "MDEdit vX.Y.Z"
-git push origin HEAD
 git push origin vX.Y.Z
 ```
 

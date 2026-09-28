@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Match tag to package version
         shell: bash
         run: |
@@ -21,6 +23,12 @@ jobs:
           lock_version="$(node -p "require('./package-lock.json').version")"
           test "$GITHUB_REF_NAME" = "v$package_version"
           test "$package_version" = "$lock_version"
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "$notes"
+          grep -Eiq '临时签名|ad hoc' "$notes"
+          grep -Eiq 'Gatekeeper|公证|notariz' "$notes"
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
 
   build:
     needs: version
@@ -44,39 +52,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:worker
       - name: Build temporary-signed macOS trial installer
-        if: matrix.platform == 'macos-arm64' && (github.ref_name == 'v0.3.0' || github.ref_name == 'v0.4.0' || github.ref_name == 'v0.5.0' || github.ref_name == 'v0.5.1' || github.ref_name == 'v0.6.0')
+        if: matrix.platform == 'macos-arm64'
         run: bash scripts/build-mac-adhoc.sh
-      - name: Require macOS signing and notarization credentials
-        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0' && github.ref_name != 'v0.4.0' && github.ref_name != 'v0.5.0' && github.ref_name != 'v0.5.1' && github.ref_name != 'v0.6.0'
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [ -z "${!name}" ]; then
-              echo "Missing macOS release credential: $name" >&2
-              exit 1
-            fi
-          done
-      - name: Build macOS installer
-        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0' && github.ref_name != 'v0.4.0' && github.ref_name != 'v0.5.0' && github.ref_name != 'v0.5.1' && github.ref_name != 'v0.6.0'
-        run: npx electron-builder --mac dmg --arm64 --publish never
-        env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Verify macOS signature and notarization
-        if: matrix.platform == 'macos-arm64' && github.ref_name != 'v0.3.0' && github.ref_name != 'v0.4.0' && github.ref_name != 'v0.5.0' && github.ref_name != 'v0.5.1' && github.ref_name != 'v0.6.0'
-        run: |
-          codesign --verify --deep --strict --verbose=2 dist/mac-arm64/MDEdit.app
-          spctl --assess --type execute --verbose=4 dist/mac-arm64/MDEdit.app
-          xcrun stapler validate dist/mac-arm64/MDEdit.app
       - name: Build Windows installer
         if: matrix.platform == 'windows-x64'
         run: npx electron-builder --win nsis --x64 --publish never
@@ -121,8 +98,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           notes="docs/releases/${GITHUB_REF_NAME}.md"
-          if [ -f "$notes" ]; then
-            gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --title "MDEdit ${GITHUB_REF_NAME}" --notes-file "$notes"
-          else
-            gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --title "MDEdit ${GITHUB_REF_NAME}" --generate-notes
-          fi
+          gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --title "MDEdit ${GITHUB_REF_NAME}" --notes-file "$notes"
