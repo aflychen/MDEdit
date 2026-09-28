@@ -4,11 +4,11 @@ import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { DEFAULT_PDF_EXPORT_OPTIONS, parsePdfExportOptions, pdfPageStyles, type PdfExportOptions } from '../shared/pdf-export-options'
 
 export type ExportFormat = 'html' | 'pdf'
 
 const pageStyles = `
-@page { size: A4; margin: 18mm; }
 * { box-sizing: border-box; }
 html { background: #fff; color: #263444; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 body { margin: 0; }
@@ -56,9 +56,10 @@ async function katexStyles(): Promise<string> {
   return css
 }
 
-async function standaloneHtml(title: string, body: string): Promise<string> {
+async function standaloneHtml(title: string, body: string, pdfOptions?: PdfExportOptions): Promise<string> {
   const css = await katexStyles()
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(title)}</title><style>${pageStyles}\n${css}</style></head><body><article class="document">${body}</article></body></html>`
+  const printStyles = pdfPageStyles(pdfOptions ?? DEFAULT_PDF_EXPORT_OPTIONS)
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(title)}</title><style>${printStyles}\n${pageStyles}\n${css}</style></head><body><article class="document">${body}</article></body></html>`
 }
 
 async function writeAtomic(path: string, content: string | Buffer): Promise<void> {
@@ -70,7 +71,7 @@ async function writeAtomic(path: string, content: string | Buffer): Promise<void
   } finally { await rm(temporary, { force: true }) }
 }
 
-async function renderPdf(html: string): Promise<Buffer> {
+async function renderPdf(html: string, options: PdfExportOptions): Promise<Buffer> {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'mdedit-export-'))
   const htmlPath = join(temporaryDirectory, 'document.html')
   const partition = `mdedit-export-${randomUUID()}`
@@ -83,22 +84,23 @@ async function renderPdf(html: string): Promise<Buffer> {
     await writeFile(htmlPath, html, { mode: 0o600 })
     await printWindow.loadFile(htmlPath)
     await printWindow.webContents.executeJavaScript('document.fonts.ready.then(() => Promise.all(Array.from(document.images, image => image.decode())))')
-    return await printWindow.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true })
+    return await printWindow.webContents.printToPDF({ pageSize: options.paperSize, printBackground: true, preferCSSPageSize: true })
   } finally {
     if (!printWindow.isDestroyed()) printWindow.destroy()
     await rm(temporaryDirectory, { recursive: true, force: true })
   }
 }
 
-export async function exportDocument(owner: BrowserWindow, format: ExportFormat, title: string, body: string): Promise<string | null> {
+export async function exportDocument(owner: BrowserWindow, format: ExportFormat, title: string, body: string, pdfOptions?: unknown): Promise<string | null> {
   if (format !== 'html' && format !== 'pdf') throw new Error('不支持的导出格式')
   if (typeof title !== 'string' || typeof body !== 'string' || title.length > 500 || body.length > 100_000_000) throw new Error('导出内容无效或过大')
+  const options = format === 'pdf' ? parsePdfExportOptions(pdfOptions) : undefined
   const extension = `.${format}`
   const name = title.replace(/\.md$/i, '') || '未命名文档'
   const result = await dialog.showSaveDialog(owner, { defaultPath: `${name}${extension}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   if (result.canceled || !result.filePath) return null
   if (extname(result.filePath).toLowerCase() !== extension) throw new Error(`请使用 ${extension} 扩展名保存导出文件`)
-  const html = await standaloneHtml(title, body)
-  await writeAtomic(result.filePath, format === 'pdf' ? await renderPdf(html) : html)
+  const html = await standaloneHtml(title, body, options)
+  await writeAtomic(result.filePath, options ? await renderPdf(html, options) : html)
   return result.filePath
 }

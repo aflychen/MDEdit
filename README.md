@@ -8,7 +8,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.6.2 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.7.0 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ### 开发
 
@@ -60,7 +60,7 @@ git push origin vX.Y.Z
 - `Cmd/Ctrl+O` 打开 `.md`，`Cmd/Ctrl+N` 新建。
 - 多个文档以标签打开；`Cmd/Ctrl+Tab` 和 `Cmd/Ctrl+Shift+Tab` 切换标签，`Cmd/Ctrl+W` 关闭当前标签。焦点在标签上时也可用左右方向键、Home、End 导航。同一路径再次打开时会聚焦已有标签。
 - `Cmd/Ctrl+S` 立即保存，`Cmd/Ctrl+Shift+S` 另存为。
-- 顶栏“文件”菜单提供打开文件夹、另存为、导出 HTML/PDF 和最近文件。导出使用当前标签的最新内容；HTML 为包含本地图片、图表和公式字体的单文件，PDF 为 A4。远程图片不加载，本地图片不可读取时会提示失败。
+- 顶栏“文件”菜单提供打开文件夹、另存为、导出 HTML/PDF 和最近文件。导出使用当前标签的最新内容；HTML 为包含本地图片、图表和公式字体的单文件。PDF 可选 A4、A5、Letter 纸张，10/18/25 mm 页边距，以及一级标题从新页开始；默认 A4、18 mm、不强制分页。远程图片不加载，本地图片不可读取时会提示失败。
 - `Cmd/Ctrl+B`、`Cmd/Ctrl+I`、`Cmd/Ctrl+K` 插入常用 Markdown 标记。
 - `Cmd/Ctrl+F` 打开查找与替换。
 - 工具栏直接提供标题级别、粗体、斜体和链接；“插入”菜单提供行内代码、列表、引用、代码块和 GFM 表格。可按行列数插入表格，也可将当前行或选中的多行转换为无序列表、数字有序列表和任务列表。
@@ -85,7 +85,7 @@ git push origin vX.Y.Z
 
 A local Markdown editor for macOS and Windows. Source editing is powered by CodeMirror 6. The preview supports CommonMark, commonly used GFM features, code block highlighting, Mermaid diagrams, and math formulas. You can browse and search Markdown documents in a local folder. Files are saved to their original `.md` paths, and recovery drafts are stored in Electron's application data directory.
 
-**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.6.2 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
+**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.7.0 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
 ## Development
 
@@ -137,7 +137,7 @@ git push origin vX.Y.Z
 - `Cmd/Ctrl+O` opens a `.md` file; `Cmd/Ctrl+N` creates a new document.
 - Open multiple documents in tabs. Use `Cmd/Ctrl+Tab` and `Cmd/Ctrl+Shift+Tab` to switch tabs, and `Cmd/Ctrl+W` to close the current tab. When a tab is focused, the arrow keys, Home, and End also navigate the tabs. Opening a path that is already open focuses its existing tab.
 - `Cmd/Ctrl+S` saves immediately; `Cmd/Ctrl+Shift+S` opens Save As.
-- The File menu contains Open Folder, Save As, HTML/PDF export, and recent files. Export uses the latest content in the current tab. HTML is a single file containing local images, diagrams, and formula fonts; PDF uses A4 page size. Remote images are not loaded. An error is shown if a local image cannot be read.
+- The File menu contains Open Folder, Save As, HTML/PDF export, and recent files. Export uses the latest content in the current tab. HTML is a single file containing local images, diagrams, and formula fonts. PDF export offers A4, A5, and Letter paper; 10, 18, and 25 mm margins; and an option to start level-one headings on a new page. The defaults are A4, 18 mm, and no forced heading breaks. Remote images are not loaded. An error is shown if a local image cannot be read.
 - `Cmd/Ctrl+B`, `Cmd/Ctrl+I`, and `Cmd/Ctrl+K` insert common Markdown markers.
 - `Cmd/Ctrl+F` opens Find and Replace.
 - The toolbar keeps heading level, bold, italic, and link controls visible. The Insert menu contains inline code, lists, quotes, code blocks, and GFM tables. It can insert a table with chosen dimensions or convert the current line or selected lines to a bullet, numbered, or task list.

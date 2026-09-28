@@ -29,7 +29,7 @@ export function pdfPageStyles(options: PdfExportOptions): string {
   const { paperSize, margin, pageBreakBeforeH1 } = parsePdfExportOptions(options)
   const page = `@page { size: ${paperSize}; margin: ${marginMillimeters[margin]}mm; }`
   const headings = pageBreakBeforeH1
-    ? '\n@media print { .document > h1:not(:first-child) { break-before: page; page-break-before: always; } }'
+    ? '\n@media print { .document > h1:not(:first-child) { break-before: page; } }'
     : ''
   return page + headings
 }

@@ -186,7 +186,7 @@ register('choose-save', async (text: string, format: { hasBom: boolean; lineEndi
   watchDocument(opened.path)
   return opened
 })
-register('export-document', async (format: ExportFormat, title: string, body: string) => exportDocument(window!, format, title, body))
+register('export-document', async (format: ExportFormat, title: string, body: string, pdfOptions?: unknown) => exportDocument(window!, format, title, body, pdfOptions))
 register('save', async (path: string, text: string, revision: number, editedAt: number, allowMixed: boolean) => {
   const result = await documentOperations.run(async () => {
     documents.assertOpen(path)

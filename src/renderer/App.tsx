@@ -20,6 +20,7 @@ import { renderMermaidBlocks } from './mermaid-preview'
 import { imageExtension } from '../shared/image-format'
 import { focusModeExtension, typewriterModeExtension } from './writing-mode'
 import { editTable, navigateTableCell, tableAt, type TableAction, type TableCommand } from './table-editing'
+import { DEFAULT_PDF_EXPORT_OPTIONS, parsePdfExportOptions, type PdfExportOptions, type PdfMargin, type PdfPaperSize } from '../shared/pdf-export-options'
 
 const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
 const draftPreview = (draft: Draft) => {
@@ -98,6 +99,10 @@ export default function App() {
     try { return parseThemePreference(localStorage.getItem('mdedit-theme')) }
     catch { return 'system' }
   })
+  const [pdfOptions, setPdfOptions] = useState<PdfExportOptions>(() => {
+    try { return parsePdfExportOptions(JSON.parse(localStorage.getItem('mdedit-pdf-options') ?? 'null')) }
+    catch { return { ...DEFAULT_PDF_EXPORT_OPTIONS } }
+  })
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const resolvedTheme = resolveTheme(themePreference, systemDark)
   const [sidebarView, setSidebarView] = useState<'files' | 'search' | 'outline' | null>('outline')
@@ -150,6 +155,9 @@ export default function App() {
     document.documentElement.dataset.theme = resolvedTheme
     try { localStorage.setItem('mdedit-theme', themePreference) } catch { /* Preference storage may be unavailable. */ }
   }, [resolvedTheme, themePreference])
+  useEffect(() => {
+    try { localStorage.setItem('mdedit-pdf-options', JSON.stringify(pdfOptions)) } catch { /* Preference storage may be unavailable. */ }
+  }, [pdfOptions])
   useEffect(() => {
     editor.current?.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
   }, [resolvedTheme])
@@ -269,12 +277,12 @@ export default function App() {
       if (!current) return
       const { buildExportBody } = await import('./export-content')
       const body = await buildExportBody(current.text, current.path)
-      const target = await window.mdedit.exportDocument(format, documentName(current.path), body)
+      const target = await window.mdedit.exportDocument(format, documentName(current.path), body, format === 'pdf' ? pdfOptions : undefined)
       if (target) setNotice(`已导出到 ${target}`)
     } catch (error) {
       setNotice(`导出 ${format.toUpperCase()} 失败：${error instanceof Error ? error.message : String(error)}`)
     } finally { endOperation() }
-  }, [beginOperation, endOperation, getSession])
+  }, [beginOperation, endOperation, getSession, pdfOptions])
 
   const importImages = useCallback(async (files: File[], view: EditorView, from: number, to: number) => {
     const id = editorId.current
@@ -859,6 +867,11 @@ export default function App() {
             <button disabled={busy} onClick={() => runFromMenu(() => void saveAs())}>另存为…</button>
             <div className="menu-separator" />
             <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('html'))}>导出 HTML…</button>
+            <div className="menu-separator" />
+            <span className="menu-caption">PDF 导出设置</span>
+            <label className="menu-field">纸张尺寸<select value={pdfOptions.paperSize} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, paperSize: event.target.value as PdfPaperSize }))}><option value="A4">A4</option><option value="A5">A5</option><option value="Letter">Letter</option></select></label>
+            <label className="menu-field">页边距<select value={pdfOptions.margin} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, margin: event.target.value as PdfMargin }))}><option value="narrow">窄 · 10 mm</option><option value="normal">标准 · 18 mm</option><option value="wide">宽 · 25 mm</option></select></label>
+            <label className="pdf-page-break"><input type="checkbox" checked={pdfOptions.pageBreakBeforeH1} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, pageBreakBeforeH1: event.target.checked }))} />一级标题从新页开始</label>
             <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('pdf'))}>导出 PDF…</button>
             {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">最近文件</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path)}<small>{path}</small></button>)}</>}
           </div>

@@ -16,7 +16,8 @@ describe('PDF export options', () => {
 
   it('starts later level-one headings on a new page when requested', () => {
     const css = pdfPageStyles({ paperSize: 'A4', margin: 'normal', pageBreakBeforeH1: true })
-    expect(css).toContain('.document > h1:not(:first-child) { break-before: page; page-break-before: always; }')
+    expect(css).toContain('.document > h1:not(:first-child) { break-before: page; }')
+    expect(css).not.toContain('page-break-before')
   })
 
   it('rejects incomplete and incorrectly typed settings before printing', () => {
