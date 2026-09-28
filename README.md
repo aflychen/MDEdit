@@ -8,7 +8,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用 v0.5.1。v0.5.1 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用 v0.5.1 或 v0.6.0。v0.6.0 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ### 开发
 
@@ -35,13 +35,13 @@ npm run dist:mac
 npm run dist:win
 ```
 
-`dist:mac` 和 `dist:win` 应分别在目标系统上运行。未签名的 macOS 包只适合本地开发验证；对外分发需要 Developer ID Application 签名与 Apple 公证。
+`dist:mac` 和 `dist:win` 应分别在目标系统上运行。临时签名 macOS 包可作为试用附件提供，但 Gatekeeper 不会自动放行；可直接分发的正式 macOS 安装包仍需 Developer ID Application 签名与 Apple 公证。
 
 ### 版本发布
 
-版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0、v0.4.0、v0.5.0 和 v0.5.1 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
+版本号保存在 `package.json` 和 `package-lock.json`，Git 标签使用 `vX.Y.Z`。发布新版本时，先更新版本号与 `docs/releases/vX.Y.Z.md`，提交代码，然后创建并推送同名标签。标签触发 [Release 工作流](.github/workflows/release.yml)：在 macOS 和 Windows 分别运行测试、构建安装包，计算 SHA-256，并将安装包附到对应的 GitHub Release。v0.3.0、v0.4.0、v0.5.0、v0.5.1 和 v0.6.0 明确采用临时签名试用包；后续版本仍要求 macOS 正式签名和公证。版本不匹配或构建校验失败时发布会失败，已发布的版本不覆盖。
 
-发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0、v0.4.0、v0.5.0 和 v0.5.1 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
+发布正式 macOS 安装包前，在 GitHub Actions Secrets 配置 `MAC_CSC_LINK`（Developer ID Application `.p12` 的 Base64 内容）、`MAC_CSC_KEY_PASSWORD`（证书导出密码）、`APPLE_ID`（Apple 开发者账号）、`APPLE_APP_SPECIFIC_PASSWORD`（应用专用密码）和 `APPLE_TEAM_ID`。不要将证书或密码提交到仓库。v0.3.0、v0.4.0、v0.5.0、v0.5.1 和 v0.6.0 的临时签名例外会验证应用签名与 DMG 完整性，但不会通过 Gatekeeper 或公证校验。
 
 例如发布补丁版本：
 
@@ -82,7 +82,7 @@ git push origin vX.Y.Z
 
 A local Markdown editor for macOS and Windows. Source editing is powered by CodeMirror 6. The preview supports CommonMark, commonly used GFM features, code block highlighting, Mermaid diagrams, and math formulas. You can browse and search Markdown documents in a local folder. Files are saved to their original `.md` paths, and recovery drafts are stored in Electron's application data directory.
 
-**macOS notice:** The macOS installer in v0.5.0 fails to launch; use v0.5.1 instead. The v0.5.1 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
+**macOS notice:** The macOS installer in v0.5.0 fails to launch; use v0.5.1 or v0.6.0 instead. The v0.6.0 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
 ## Development
 
@@ -109,13 +109,13 @@ npm run dist:mac
 npm run dist:win
 ```
 
-Run `dist:mac` and `dist:win` on their respective target operating systems. Unsigned macOS packages are suitable only for local development checks. Distribution requires Developer ID Application signing and Apple notarization.
+Run `dist:mac` and `dist:win` on their respective target operating systems. An ad hoc signed macOS build can be attached as a trial package, but Gatekeeper will not automatically allow it. A macOS installer that opens directly requires Developer ID Application signing and Apple notarization.
 
 ## Releases
 
-The version is recorded in `package.json` and `package-lock.json`; Git tags use the `vX.Y.Z` format. To release a new version, update the version and `docs/releases/vX.Y.Z.md`, commit the changes, then create and push a tag with the same version. The tag triggers the [Release workflow](.github/workflows/release.yml), which runs tests and builds an installer on macOS and Windows, calculates SHA-256 checksums, and attaches the installers to the corresponding GitHub Release. v0.3.0, v0.4.0, v0.5.0, and v0.5.1 explicitly use ad hoc signed trial builds. Future releases still require proper macOS signing and notarization. A release fails if the version does not match or a build check fails; published releases are not overwritten.
+The version is recorded in `package.json` and `package-lock.json`; Git tags use the `vX.Y.Z` format. To release a new version, update the version and `docs/releases/vX.Y.Z.md`, commit the changes, then create and push a tag with the same version. The tag triggers the [Release workflow](.github/workflows/release.yml), which runs tests and builds an installer on macOS and Windows, calculates SHA-256 checksums, and attaches the installers to the corresponding GitHub Release. v0.3.0, v0.4.0, v0.5.0, v0.5.1, and v0.6.0 explicitly use ad hoc signed trial builds. Future releases still require proper macOS signing and notarization. A release fails if the version does not match or a build check fails; published releases are not overwritten.
 
-Before releasing a properly signed macOS installer, configure these GitHub Actions secrets: `MAC_CSC_LINK` (Base64-encoded Developer ID Application `.p12`), `MAC_CSC_KEY_PASSWORD` (certificate export password), `APPLE_ID` (Apple developer account), `APPLE_APP_SPECIFIC_PASSWORD` (app-specific password), and `APPLE_TEAM_ID`. Do not commit certificates or passwords to the repository. The ad hoc signing exceptions for v0.3.0, v0.4.0, v0.5.0, and v0.5.1 verify the app signature and DMG integrity, but do not pass Gatekeeper or notarization checks.
+Before releasing a properly signed macOS installer, configure these GitHub Actions secrets: `MAC_CSC_LINK` (Base64-encoded Developer ID Application `.p12`), `MAC_CSC_KEY_PASSWORD` (certificate export password), `APPLE_ID` (Apple developer account), `APPLE_APP_SPECIFIC_PASSWORD` (app-specific password), and `APPLE_TEAM_ID`. Do not commit certificates or passwords to the repository. The ad hoc signing exceptions for v0.3.0, v0.4.0, v0.5.0, v0.5.1, and v0.6.0 verify the app signature and DMG integrity, but do not pass Gatekeeper or notarization checks.
 
 For example, to release a patch version:
 
