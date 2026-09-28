@@ -17,14 +17,12 @@ button:disabled { cursor: wait; opacity: .55; }
 .top-actions button:hover, .toolbar button:hover { background: #f1f3f8; color: #1d2d42; }
 .top-actions .primary { color: #fff; background: #253cdb; box-shadow: 0 2px 6px #253cdb24; }
 .top-actions .primary:hover { background: #1b30c2; color: #fff; }
-.notice, .recovery-strip { display: flex; align-items: center; gap: 15px; min-height: 44px; padding: 8px 25px; background: #fff5ee; color: #9b4b21; border-bottom: 1px solid #f1d6c4; font-size: 12px; }
+.notice { display: flex; align-items: center; gap: 15px; min-height: 44px; padding: 8px 25px; background: #fff5ee; color: #9b4b21; border-bottom: 1px solid #f1d6c4; font-size: 12px; }
 .notice-conflict { background: #fff0ef; color: #a43732; border-color: #f2ceca; }
 .notice > span { flex: 1; }.notice > div { display: flex; gap: 8px; }
-.notice button, .recovery-strip button { border: 1px solid currentColor; border-radius: 5px; padding: 5px 9px; font-size: 11px; font-weight: 600; }
-.notice button:hover, .recovery-strip button:hover { background: #ffffffaa; }
-.notice .plain, .recovery-strip .plain { border-color: transparent; font-size: 15px; }
-.recovery-strip { background: #eef2ff; color: #3145a2; border-color: #dfe6ff; overflow-x: auto; }
-.recovery-strip > span, .recovery-strip button { flex: none; white-space: nowrap; }
+.notice button { border: 1px solid currentColor; border-radius: 5px; padding: 5px 9px; font-size: 11px; font-weight: 600; }
+.notice button:hover { background: #ffffffaa; }
+.notice .plain { border-color: transparent; font-size: 15px; }
 .toolbar { display: flex; align-items: center; min-height: 46px; gap: 12px; padding: 6px 16px; border-bottom: 1px solid #e8ebf0; background: #fafbfc; white-space: nowrap; }
 .tool-group { display: flex; align-items: center; gap: 3px; min-width: 0; }.tool-group button { min-width: 30px; height: 30px; padding: 0 7px; border-radius: 5px; font-size: 12px; color: #566273; }
 .sidebar-tools { padding-right: 11px; border-right: 1px solid #e3e7ec; }
@@ -63,7 +61,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .tab-indicator.status-conflict, .tab-indicator.status-error { color: #cc443d; font-weight: 800; }
 .close-tab { margin: 0 7px; padding: 2px 5px; border-radius: 4px; color: #8390a1; }
 .close-tab:hover { background: #e9edf4; color: #25334b; }
-.new-tab { padding: 0 13px; color: #68768b; }
+.new-tab { flex: none; padding: 0 13px; color: #68768b; }
 .workspace.with-sidebar.split { grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr); }
 .workspace.with-sidebar.editor-only { grid-template-columns: 220px minmax(0, 1fr); }
 .outline-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid #e2e6ec; background: #fbfcfe; }
@@ -93,6 +91,16 @@ button:disabled { cursor: wait; opacity: .55; }
 .file-menu .menu-panel, .view-menu .menu-panel { left: auto; right: 0; }
 .file-menu .menu-panel { width: 270px; }
 .insert-menu .menu-panel { width: 290px; }
+.recovery-menu { align-self: center; margin: 0 9px 0 auto; }
+.recovery-menu > summary { color: #3449a4; background: #e8edff; }
+.recovery-menu > summary strong { min-width: 19px; padding: 1px 5px; border-radius: 10px; background: #3449a4; color: #fff; font-size: 10px; text-align: center; }
+.recovery-menu .menu-panel { left: auto; right: 0; width: min(360px, calc(100vw - 24px)); max-height: min(400px, var(--menu-available-height, 320px)); }
+.recovery-heading { display: flex; justify-content: space-between; padding: 8px 10px 10px; color: #384a65; font-size: 12px; font-weight: 700; }
+.recovery-heading span { color: #68778c; font-weight: 400; }
+.recovery-menu .menu-panel > button { display: block; padding: 9px 10px; }
+.recovery-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.recovery-excerpt { display: block; overflow: hidden; margin-top: 3px; color: #68778c; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.recovery-menu .menu-panel small { color: #68778c; font-size: 11px; }
 .menu-panel > button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; height: auto; padding: 7px 10px; border-radius: 5px; text-align: left; color: #44536a; font-size: 12px; font-weight: 500; }
 .menu-panel button:hover { background: #f1f4fa; color: #243853; }
 .menu-panel button:disabled:hover { background: transparent; }
@@ -169,7 +177,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .app-menu > summary { color: #aab9cc; }
 :root[data-theme="dark"] .app-menu > summary::after { color: #91a0b6; }
 :root[data-theme="dark"] .app-menu > summary:hover, :root[data-theme="dark"] .app-menu[open] > summary { background: #2b3950; color: #edf2fa; }
+:root[data-theme="dark"] .recovery-menu > summary { color: #c4ceff; background: #303c69; }
+:root[data-theme="dark"] .recovery-menu > summary strong { background: #8395f7; color: #172139; }
 :root[data-theme="dark"] .menu-panel, :root[data-theme="dark"] .table-picker { color: #dce5f1; background: #253247; border-color: #48566b; }
+:root[data-theme="dark"] .recovery-heading { color: #dce5f1; }
+:root[data-theme="dark"] .recovery-heading span, :root[data-theme="dark"] .recovery-excerpt { color: #acbad0; }
 :root[data-theme="dark"] .menu-panel > button { color: #dce5f1; }
 :root[data-theme="dark"] .menu-panel button:hover { color: #f0f4fb; background: #34445a; }
 :root[data-theme="dark"] .menu-panel button:disabled:hover { background: transparent; }
@@ -208,7 +220,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .search-results span { color: #9dabbe; }
 :root[data-theme="dark"] .notice { color: #f2c390; background: #453325; border-color: #69503b; }
 :root[data-theme="dark"] .notice-conflict { color: #f3aaa5; background: #4b2c31; border-color: #75434b; }
-:root[data-theme="dark"] .recovery-strip { color: #c4ceff; background: #303c69; border-color: #4e5c9d; }
 :root[data-theme="dark"] .image-placeholder, :root[data-theme="dark"] .preview-error { color: #e0caa5; background: #463a2a; border-color: #69543a; }
 :root[data-theme="dark"] .preview-content .mermaid-error, :root[data-theme="dark"] .preview-content .katex-error { color: #f1a9a4; }
 :root[data-theme="dark"] .preview-content .mermaid-error > span { background: #492c32; }

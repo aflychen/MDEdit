@@ -22,6 +22,22 @@ import { focusModeExtension, typewriterModeExtension } from './writing-mode'
 import { editTable, navigateTableCell, tableAt, type TableAction, type TableCommand } from './table-editing'
 
 const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
+const draftPreview = (draft: Draft) => {
+  const lines = draft.text.slice(0, 1600).split(/\r?\n/)
+    .map(value => value.trim())
+    .filter(value => value && value !== '---' && !value.startsWith('```'))
+    .map(value => value.replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/, '').trim())
+    .filter(Boolean)
+  if (draft.path) {
+    const directory = draft.path.match(/^(.*)[\\/][^\\/]+$/)?.[1] || draft.path
+    return { title: documentName(draft.path), detail: directory.split(/[\\/]/).filter(Boolean).slice(-2).join(' / ') || directory }
+  }
+  const first = lines[0] || '未命名草稿'
+  return {
+    title: first,
+    detail: [first.length > 60 ? first.slice(60, 140) : '', ...lines.slice(1, 3)].filter(Boolean).join(' · ').slice(0, 140)
+  }
+}
 const statusLabel = (session: DocumentSession) => ({ editing: '编辑中', saving: '正在保存', saved: '已保存', error: '保存失败', conflict: '磁盘冲突' })[session.saveState]
 const needsBackup = (session: DocumentSession) => session.revision !== session.persistedRevision || session.saveState === 'conflict' || session.saveState === 'error'
 const draftFor = (session: DocumentSession): Draft => ({ key: session.draftKey, path: session.path, text: session.text, fingerprint: session.diskFingerprint, revision: session.revision, updatedAt: session.editedAt })
@@ -103,6 +119,7 @@ export default function App() {
   const fileMenu = useRef<HTMLDetailsElement>(null)
   const insertMenu = useRef<HTMLDetailsElement>(null)
   const viewMenu = useRef<HTMLDetailsElement>(null)
+  const recoveryMenu = useRef<HTMLDetailsElement>(null)
   const editorHost = useRef<HTMLDivElement>(null)
   const previewHost = useRef<HTMLDivElement>(null)
   const editor = useRef<EditorView | null>(null)
@@ -143,7 +160,7 @@ export default function App() {
     ] })
   }, [focusMode, typewriterMode])
   useEffect(() => {
-    const menus = () => [fileMenu.current, insertMenu.current, viewMenu.current]
+    const menus = () => [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]
     const onResize = () => menus().forEach(menu => { if (menu?.open) positionMenu(menu) })
     const onPointerDown = (event: PointerEvent) => {
       if (menus().some(menu => menu?.contains(event.target as Node))) return
@@ -169,7 +186,7 @@ export default function App() {
     }
   }, [])
   useLayoutEffect(() => {
-    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu?.open) positionMenu(menu)
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]) if (menu?.open) positionMenu(menu)
   }, [notice, session.error, drafts.length])
 
   const changeWorkspace = useCallback((change: (current: TabWorkspace) => TabWorkspace) => {
@@ -817,14 +834,14 @@ export default function App() {
     target?.focus()
   }
   const closeMenus = () => {
-    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu) menu.open = false
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]) if (menu) menu.open = false
     setTableOpen(false)
   }
   const runFromMenu = (action: () => void) => { closeMenus(); action() }
   const onMenuToggle = (opened: HTMLDetailsElement) => {
     if (!opened.open) return
     positionMenu(opened)
-    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu && menu !== opened) menu.open = false
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]) if (menu && menu !== opened) menu.open = false
     if (opened !== insertMenu.current) setTableOpen(false)
   }
   return <div className="app-shell">
@@ -851,9 +868,24 @@ export default function App() {
     <nav className="tabbar" aria-label="文档标签"><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
       <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? '未命名文档'} · ${statusLabel(tab)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path)}</span></button>
       <button disabled={busy} className="close-tab" aria-label={`关闭 ${documentName(tab.path)}`} title="关闭标签 (⌘/Ctrl+W)" onClick={() => void closeDocument(tab.id)}>×</button>
-    </div>)}</div><button disabled={busy} className="new-tab" aria-label="新建文档标签" onClick={newDocument}>＋</button></nav>
+    </div>)}</div><button disabled={busy} className="new-tab" aria-label="新建文档标签" onClick={newDocument}>＋</button>
+      {drafts.length > 0 && <details className="app-menu recovery-menu" ref={recoveryMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
+        <summary aria-label={`可恢复草稿，${drafts.length} 份`}>可恢复草稿 <strong>{drafts.length}</strong></summary>
+        <div className="menu-panel recovery-panel">
+          <div className="recovery-heading">可恢复草稿 <span>{drafts.length} 份</span></div>
+          {drafts.map(draft => {
+            const { title, detail } = draftPreview(draft)
+            const updated = new Date(draft.updatedAt).toLocaleString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            return <button disabled={busy} key={draft.key} aria-label={`恢复草稿：${title}${draft.path ? `，路径 ${draft.path}` : detail ? `，${detail}` : ''}，${updated}`} title={draft.path ?? title} onClick={() => runFromMenu(() => void restore(draft))}>
+              <span className="recovery-title">{title}</span>
+              {detail && <span className="recovery-excerpt" title={draft.path ?? detail}>{detail}</span>}
+              <small>{draft.path ? (draft.diskModifiedAt === null ? '原文件不可用' : '文件草稿') : '未命名'} · {updated} · {draft.text.length} 字符</small>
+            </button>
+          })}
+        </div>
+      </details>}
+    </nav>
     {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice || session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>重新载入磁盘文件</button><button disabled={busy} onClick={() => void saveAs()}>将当前内容另存副本</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>重试</button><button disabled={busy} onClick={() => void saveAs()}>另存为</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
-    {drafts.length > 0 && <div className="recovery-strip"><span>发现 {drafts.length} 份可恢复草稿</span>{drafts.map(draft => <button disabled={busy} key={draft.key} onClick={() => void restore(draft)}>恢复 {documentName(draft.path)} · {new Date(draft.updatedAt).toLocaleString()}{draft.path ? ` · 磁盘 ${draft.diskModifiedAt ? new Date(draft.diskModifiedAt).toLocaleString() : '文件不可用'}` : ''}</button>)}<button className="plain" onClick={() => setDrafts([])}>稍后</button></div>}
     <div className="toolbar">
       <div className="tool-group sidebar-tools" role="group" aria-label="侧栏">
         <button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button>

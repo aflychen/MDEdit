@@ -8,7 +8,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.6.1 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.6.2 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ### 开发
 
@@ -73,6 +73,7 @@ git push origin vX.Y.Z
 - 在编辑区粘贴或拖入 PNG、JPEG、GIF、WebP、AVIF 图片时，图片会存入文档同级的 `images/` 目录并插入相对路径；未命名文档先选择保存位置。单张图片上限 10 MiB，每次最多 20 张且总量不超过 50 MiB。
 - 使用 `mermaid` 围栏代码块预览图表；使用 `$...$` 和 `$$...$$` 预览行内与块级公式。语法错误只显示在对应图表或公式处。
 - 各标签的已命名文档停止输入约 2 秒后自动保存；未命名文档只保存恢复草稿。关闭仍有未保存内容的标签前会先备份恢复草稿。
+- 标签栏右侧的“可恢复草稿”入口显示草稿数量；点击后可按内容摘要和修改时间选择草稿恢复。关闭列表不会删除草稿。
 
 文件夹访问基于本次会话中通过系统对话框选择的目录；文件树与搜索拒绝静态符号链接及越界路径。若同机进程在读写期间持续替换目录，仍存在路径竞态，不能将此机制视为对恶意本地进程的隔离。本地图片只允许位于对应文档的目录及子目录。远程图片默认不加载。文档被其他程序修改时，应用会停止覆盖并提供重新载入或另存副本。后续功能范围见 [迭代规划](docs/roadmap.md)。
 
@@ -84,7 +85,7 @@ git push origin vX.Y.Z
 
 A local Markdown editor for macOS and Windows. Source editing is powered by CodeMirror 6. The preview supports CommonMark, commonly used GFM features, code block highlighting, Mermaid diagrams, and math formulas. You can browse and search Markdown documents in a local folder. Files are saved to their original `.md` paths, and recovery drafts are stored in Electron's application data directory.
 
-**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.6.1 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
+**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.6.2 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
 ## Development
 
@@ -149,6 +150,7 @@ git push origin vX.Y.Z
 - Paste or drag PNG, JPEG, GIF, WebP, or AVIF images into the editor to save them in an `images/` folder next to the document and insert relative paths. For an unnamed document, choose where to save it first. Each image is limited to 10 MiB; each import can contain up to 20 images and 50 MiB in total.
 - Use a `mermaid` fenced code block to preview a diagram. Use `$...$` and `$$...$$` for inline and block formulas. Syntax errors are shown only at the affected diagram or formula.
 - Named documents in each tab are saved automatically about 2 seconds after typing stops. Unnamed documents save only recovery drafts. Before closing a tab with unsaved content, the app first backs it up as a recovery draft.
+- The Recoverable Drafts control on the right side of the tab bar shows the draft count. Open it to choose a draft by content preview and modification time. Closing the list does not delete drafts.
 
 Folder access is limited to directories selected through the system dialog during the current session. The file tree and search reject static symlinks and paths outside the selected folder. A path race is still possible if another local process repeatedly replaces directories during a read or write, so this mechanism should not be treated as isolation from a malicious process on the same machine. Local images are allowed only in the corresponding document's directory or its subdirectories. Remote images are not loaded by default. If another program modifies a document, the app stops overwriting it and offers to reload it or save a copy. See the [iteration roadmap](docs/roadmap.md) for planned work.
 

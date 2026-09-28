@@ -10,10 +10,10 @@ npx electron-builder --mac --dir --arm64 --publish never --config.mac.notarize=f
 codesign --force --deep --sign - --options runtime \
   --entitlements build/entitlements.mac-adhoc.plist dist/mac-arm64/MDEdit.app
 codesign --verify --deep --strict --verbose=2 dist/mac-arm64/MDEdit.app
-codesign -dv --verbose=2 dist/mac-arm64/MDEdit.app 2>&1 | grep -q 'Signature=adhoc'
+codesign -dv --verbose=2 dist/mac-arm64/MDEdit.app 2>&1 | grep 'Signature=adhoc' >/dev/null
 codesign --display --entitlements - --xml dist/mac-arm64/MDEdit.app 2>/dev/null \
   | plutil -convert json -o - - \
-  | grep -Fq '"com.apple.security.cs.disable-library-validation":true'
+  | grep -F '"com.apple.security.cs.disable-library-validation":true' >/dev/null
 
 npx electron-builder --prepackaged dist/mac-arm64/MDEdit.app --mac dmg --arm64 --publish never \
   --config.mac.notarize=false "--config.artifactName=MDEdit-${version}-arm64-adhoc.\${ext}"
