@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { WorkspaceEntry, WorkspaceSearchResponse, WorkspaceSearchResult } from '../shared/contracts'
 import type { OutlineHeading } from './preview'
+import { precedingIndex, visibleOutlineIndices } from './outline-navigation'
 
 type SidebarView = 'files' | 'search' | 'outline'
 
@@ -9,6 +10,8 @@ interface Props {
   root: string | null
   activePath: string | null
   outline: OutlineHeading[] | undefined
+  documentId: number
+  activeLine: number
   busy: boolean
   onChooseFolder: () => void
   onCloseFolder: () => void
@@ -60,7 +63,7 @@ function FileNode({ entry, activePath, busy, onOpenFile }: {
   </li>
 }
 
-export default function WorkspaceSidebar({ view, root, activePath, outline, busy, onChooseFolder, onCloseFolder, onOpenFile, onOpenResult, onJumpHeading, onClose }: Props) {
+export default function WorkspaceSidebar({ view, root, activePath, outline, documentId, activeLine, busy, onChooseFolder, onCloseFolder, onOpenFile, onOpenResult, onJumpHeading, onClose }: Props) {
   const [entries, setEntries] = useState<WorkspaceEntry[]>([])
   const [treeError, setTreeError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -69,6 +72,17 @@ export default function WorkspaceSidebar({ view, root, activePath, outline, busy
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const searchRequest = useRef(0)
+  const [outlineQuery, setOutlineQuery] = useState('')
+  const [collapsedHeadings, setCollapsedHeadings] = useState<Set<number>>(() => new Set())
+  const outlineStructure = (outline ?? []).map(heading => `${heading.depth}:${heading.text}`).join('\n')
+  const previousOutlineStructure = useRef<string | null>(null)
+
+  useEffect(() => { previousOutlineStructure.current = null; setOutlineQuery(''); setCollapsedHeadings(new Set()) }, [documentId])
+  useEffect(() => {
+    if (outline === undefined) return
+    if (previousOutlineStructure.current !== null && previousOutlineStructure.current !== outlineStructure) setCollapsedHeadings(new Set())
+    previousOutlineStructure.current = outlineStructure
+  }, [outline, outlineStructure])
 
   useEffect(() => {
     setEntries([])
@@ -100,9 +114,26 @@ export default function WorkspaceSidebar({ view, root, activePath, outline, busy
   }
 
   const title = { files: '文件', search: '跨文件搜索', outline: '目录' }[view]
+  const headings = outline ?? []
+  const visibleHeadings = visibleOutlineIndices(headings, outlineQuery, collapsedHeadings)
+  const activeHeading = precedingIndex(headings.map(heading => heading.line), activeLine)
+  const visibleActiveHeading = visibleHeadings.includes(activeHeading) ? activeHeading : outlineQuery.trim() ? -1 : visibleHeadings.filter(index => index < activeHeading).at(-1) ?? -1
+  const toggleHeading = (index: number) => setCollapsedHeadings(current => {
+    const next = new Set(current)
+    if (next.has(index)) next.delete(index)
+    else next.add(index)
+    return next
+  })
   return <aside className="outline-pane workspace-sidebar" aria-label={title}>
     <div className="pane-label">{title}<button aria-label={`收起${title}`} onClick={onClose}>‹</button></div>
-    {view === 'outline' && <nav aria-label="当前文档标题">{outline?.length ? outline.map((heading, index) => <button key={`${heading.line}:${index}`} disabled={busy} style={{ paddingLeft: `${14 + (heading.depth - 1) * 12}px` }} onClick={() => onJumpHeading(heading)} title={`H${heading.depth} · 第 ${heading.line} 行`}>{heading.text || '空标题'}</button>) : <p>添加标题后在这里导航</p>}</nav>}
+    {view === 'outline' && <><div className="outline-controls"><input aria-label="筛选目录标题" placeholder="筛选标题" value={outlineQuery} onChange={event => setOutlineQuery(event.target.value)} /></div><nav aria-label="当前文档标题">{headings.length ? visibleHeadings.length ? visibleHeadings.map(index => {
+      const heading = headings[index]
+      const hasChildren = headings[index + 1]?.depth > heading.depth
+      return <div key={`${heading.line}:${index}`} className="outline-entry" style={{ paddingLeft: `${5 + (heading.depth - 1) * 12}px` }}>
+        {hasChildren ? <button className="outline-toggle" type="button" aria-label={`${collapsedHeadings.has(index) ? '展开' : '折叠'} ${heading.text || '空标题'}`} aria-expanded={outlineQuery.trim() ? true : !collapsedHeadings.has(index)} disabled={busy || Boolean(outlineQuery.trim())} onClick={() => toggleHeading(index)}>{collapsedHeadings.has(index) && !outlineQuery.trim() ? '▸' : '▾'}</button> : <span className="outline-toggle-spacer" aria-hidden="true" />}
+        <button className={`outline-link ${index === visibleActiveHeading ? 'active' : ''}`} aria-current={index === visibleActiveHeading ? 'location' : undefined} disabled={busy} onClick={() => onJumpHeading(heading)} title={`H${heading.depth} · 第 ${heading.line} 行`}>{heading.text || '空标题'}</button>
+      </div>
+    }) : <p>没有匹配的标题</p> : <p>添加标题后在这里导航</p>}</nav></>}
     {view === 'files' && <div className="sidebar-body">
       <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{root ? '切换文件夹' : '选择文件夹'}</button>{root && <button onClick={onCloseFolder} disabled={busy}>关闭文件夹</button>}</div>
       {root && <><p className="folder-name" title={root}>{nameOf(root)}</p>{treeError && <p className="sidebar-error">{treeError}</p>}<ul className="file-tree">{entries.map(entry => <FileNode key={`${root}:${entry.path}`} entry={entry} activePath={activePath} busy={busy} onOpenFile={onOpenFile} />)}</ul>{!treeError && entries.length === 0 && <p className="sidebar-muted">没有 Markdown 文件</p>}</>}

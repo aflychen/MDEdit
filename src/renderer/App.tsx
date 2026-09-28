@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { basicSetup } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import { syntaxTree } from '@codemirror/language'
+import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { openSearchPanel } from '@codemirror/search'
 import iconUrl from '../../assets/icon.svg'
@@ -17,6 +18,8 @@ import { parseThemePreference, resolveTheme, type ThemePreference } from './them
 import { searchResultPosition } from './search-navigation'
 import { renderMermaidBlocks } from './mermaid-preview'
 import { imageExtension } from '../shared/image-format'
+import { focusModeExtension, typewriterModeExtension } from './writing-mode'
+import { editTable, navigateTableCell, tableAt, type TableAction, type TableCommand } from './table-editing'
 
 const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
 const statusLabel = (session: DocumentSession) => ({ editing: '编辑中', saving: '正在保存', saved: '已保存', error: '保存失败', conflict: '磁盘冲突' })[session.saveState]
@@ -27,11 +30,45 @@ const imageAlt = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[\[\]\\
 interface PreviewSnapshot { sessionId: number; revision: number; html?: string; outline?: OutlineHeading[]; words?: number; error?: string }
 interface EditorSnapshot { state: EditorState; top: number; left: number }
 
+function selectedTable(view: EditorView): { source: string; position: number; offset: number } | null {
+  const position = view.state.selection.main.head
+  const tree = syntaxTree(view.state)
+  for (const side of [1, -1] as const) {
+    let node: typeof tree.topNode | null = tree.resolveInner(position, side)
+    while (node && node.name !== 'Table') node = node.parent
+    if (!node) continue
+    // A list or blockquote may carry prefixes outside the table node range.
+    // Rewriting that range would detach the table from its container.
+    if (node.parent?.name !== 'Document') return null
+    return { source: view.state.doc.sliceString(node.from, node.to), position: position - node.from, offset: node.from }
+  }
+  // CodeMirror parses the viewport incrementally and does not recognize every
+  // remark-gfm table form. Only the uncommon fallback parses the whole document.
+  const doc = view.state.doc
+  const currentLine = doc.lineAt(position).number
+  let possible = false
+  for (let number = currentLine; number > 0; number--) {
+    const line = doc.line(number).text
+    if (number < currentLine && !line.trim()) break
+    if (line.includes('|')) { possible = true; break }
+  }
+  if (!possible && currentLine < doc.lines) possible = doc.line(currentLine + 1).text.includes('|')
+  if (!possible) return null
+  const source = doc.toString()
+  return tableAt(source, position) ? { source, position, offset: 0 } : null
+}
+
+function absoluteTableCommand(command: TableCommand, offset: number): TableCommand {
+  return { anchor: command.anchor + offset, changes: command.changes && { from: command.changes.from + offset, to: command.changes.to + offset, insert: command.changes.insert } }
+}
+
 export default function App() {
   const [workspace, setWorkspace] = useState(initialWorkspace)
   const workspaceRef = useRef(workspace)
   const session = workspace.tabs.find(tab => tab.id === workspace.activeId)!
   const [previewVisible, setPreviewVisible] = useState(true)
+  const [focusMode, setFocusMode] = useState(false)
+  const [typewriterMode, setTypewriterMode] = useState(false)
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     try { return parseThemePreference(localStorage.getItem('mdedit-theme')) }
     catch { return 'system' }
@@ -46,6 +83,7 @@ export default function App() {
   const lastPreview = previews[session.id]
   const preview = lastPreview?.revision === session.revision ? lastPreview : undefined
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
+  const [activeSectionLine, setActiveSectionLine] = useState(1)
   const [recent, setRecent] = useState<string[]>([])
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [notice, setNotice] = useState<string | null>(null)
@@ -63,6 +101,8 @@ export default function App() {
   const worker = useRef<Worker | null>(null)
   const editability = useRef(new Compartment())
   const editorAppearance = useRef(new Compartment())
+  const focusAppearance = useRef(new Compartment())
+  const typewriterBehavior = useRef(new Compartment())
   const lockedId = useRef<number | null>(null)
   const operationLock = useRef(false)
   const pendingOpenPaths = useRef<string[]>([])
@@ -84,6 +124,12 @@ export default function App() {
   useEffect(() => {
     editor.current?.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
   }, [resolvedTheme])
+  useEffect(() => {
+    editor.current?.dispatch({ effects: [
+      focusAppearance.current.reconfigure(focusMode ? focusModeExtension : []),
+      typewriterBehavior.current.reconfigure(typewriterMode ? typewriterModeExtension : [])
+    ] })
+  }, [focusMode, typewriterMode])
 
   const changeWorkspace = useCallback((change: (current: TabWorkspace) => TabWorkspace) => {
     const next = change(workspaceRef.current)
@@ -413,6 +459,20 @@ export default function App() {
     view.dispatch({ changes: { from: first.from, to: last.to, insert: replacement }, selection: range.empty ? { anchor: first.from + marker } : { anchor: first.from, head: first.from + replacement.length } })
     view.focus()
   }, [])
+  const applyTableCommand = useCallback((view: EditorView, command: TableCommand) => {
+    view.dispatch({ ...(command.changes ? { changes: command.changes } : {}), selection: { anchor: command.anchor } })
+    view.focus()
+  }, [])
+  const runTableAction = useCallback((action: TableAction) => {
+    const view = editor.current
+    if (!view || operationLock.current) return
+    const selection = selectedTable(view)
+    if (!selection) return
+    const command = editTable(selection.source, selection.position, action)
+    if (!command) return
+    applyTableCommand(view, absoluteTableCommand(command, selection.offset))
+    setTableOpen(false)
+  }, [applyTableCommand])
   const syncPreviewToLine = useCallback((line: number) => {
     const root = previewHost.current
     const id = workspaceRef.current.activeId
@@ -431,6 +491,7 @@ export default function App() {
     const line = view.state.doc.line(Math.min(heading.line, view.state.doc.lines))
     scrollGuard.current = true
     view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 12 }) })
+    setActiveSectionLine(heading.line)
     syncPreviewToLine(heading.line)
     view.focus()
     requestAnimationFrame(() => { scrollGuard.current = false })
@@ -438,7 +499,27 @@ export default function App() {
 
   useLayoutEffect(() => {
     if (!editorHost.current) return
-    editorExtensions.current = [basicSetup, markdown(), editability.current.of(EditorState.readOnly.of(false)), editorAppearance.current.of(editorTheme(resolvedTheme)), EditorView.lineWrapping,
+    editorExtensions.current = [basicSetup, markdown(), editability.current.of(EditorState.readOnly.of(false)), editorAppearance.current.of(editorTheme(resolvedTheme)), focusAppearance.current.of(focusMode ? focusModeExtension : []), typewriterBehavior.current.of(typewriterMode ? typewriterModeExtension : []), EditorView.lineWrapping,
+      Prec.high(keymap.of([
+        { key: 'Tab', run: view => {
+          if (operationLock.current) return false
+          const selection = selectedTable(view)
+          if (!selection) return false
+          const command = navigateTableCell(selection.source, selection.position)
+          if (!command) return false
+          applyTableCommand(view, absoluteTableCommand(command, selection.offset))
+          return true
+        } },
+        { key: 'Shift-Tab', run: view => {
+          if (operationLock.current) return false
+          const selection = selectedTable(view)
+          if (!selection) return false
+          const command = navigateTableCell(selection.source, selection.position, true)
+          if (!command) return false
+          applyTableCommand(view, absoluteTableCommand(command, selection.offset))
+          return true
+        } }
+      ])),
       keymap.of([
         { key: 'Mod-b', run: () => { wrapSelection('**'); return true } },
         { key: 'Mod-i', run: () => { wrapSelection('*'); return true } },
@@ -451,13 +532,16 @@ export default function App() {
         if (event.selectionSet || event.docChanged) {
           const line = event.state.doc.lineAt(event.state.selection.main.head)
           setCursor({ line: line.number, column: event.state.selection.main.head - line.from + 1 })
+          setActiveSectionLine(line.number)
         }
       }),
       EditorView.domEventHandlers({ scroll: (_event, view) => {
         if (scrollGuard.current || editorId.current !== workspaceRef.current.activeId) return
         scrollGuard.current = true
         const position = view.lineBlockAtHeight(Math.max(0, view.scrollDOM.scrollTop)).from
-        syncPreviewToLine(view.state.doc.lineAt(position).number)
+        const line = view.state.doc.lineAt(position).number
+        setActiveSectionLine(line)
+        syncPreviewToLine(line)
         requestAnimationFrame(() => { scrollGuard.current = false })
       }, paste: (event, view) => {
         const files = Array.from(event.clipboardData?.files ?? []).filter(isImageFile)
@@ -480,7 +564,7 @@ export default function App() {
     const view = new EditorView({ state: EditorState.create({ doc: active.text, extensions: editorExtensions.current }), parent: editorHost.current })
     editor.current = view
     return () => { editor.current = null; editorId.current = null; view.destroy() }
-  }, [importImages, syncPreviewToLine, update, wrapSelection])
+  }, [applyTableCommand, importImages, syncPreviewToLine, update, wrapSelection])
   useLayoutEffect(() => {
     const view = editor.current
     if (!view || editorId.current === session.id) return
@@ -492,6 +576,8 @@ export default function App() {
     view.setState(saved?.state ?? EditorState.create({ doc: session.text, extensions: editorExtensions.current }))
     view.dispatch({ effects: editability.current.reconfigure(EditorState.readOnly.of(operationLock.current)) })
     view.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
+    view.dispatch({ effects: focusAppearance.current.reconfigure(focusMode ? focusModeExtension : []) })
+    view.dispatch({ effects: typewriterBehavior.current.reconfigure(typewriterMode ? typewriterModeExtension : []) })
     view.scrollDOM.scrollTop = saved?.top ?? 0
     view.scrollDOM.scrollLeft = saved?.left ?? 0
     view.requestMeasure({
@@ -504,9 +590,10 @@ export default function App() {
     })
     const line = view.state.doc.lineAt(view.state.selection.main.head)
     setCursor({ line: line.number, column: view.state.selection.main.head - line.from + 1 })
+    setActiveSectionLine(line.number)
     setTableOpen(false)
     requestAnimationFrame(() => { scrollGuard.current = false })
-  }, [getSession, resolvedTheme, session.id, session.text])
+  }, [focusMode, getSession, resolvedTheme, session.id, session.text, typewriterMode])
   useLayoutEffect(() => {
     const view = editor.current
     if (!jumpRequest || !view || jumpRequest.path !== session.path || editorId.current !== session.id) return
@@ -663,6 +750,7 @@ export default function App() {
     const headings = Array.from(root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6'))
     const index = precedingIndex(headings.map(item => item.getBoundingClientRect().top), root.getBoundingClientRect().top + 24)
     if (index < 0) {
+      setActiveSectionLine(1)
       scrollGuard.current = true
       view.scrollDOM.scrollTop = 0
       requestAnimationFrame(() => { scrollGuard.current = false })
@@ -670,12 +758,15 @@ export default function App() {
     }
     const heading = preview.outline[index]
     if (!heading) return
+    setActiveSectionLine(heading.line)
     scrollGuard.current = true
     const line = view.state.doc.line(Math.min(heading.line, view.state.doc.lines))
     view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 12 }) })
     requestAnimationFrame(() => { scrollGuard.current = false })
   }
   const headingLevel = (session.text.split('\n')[cursor.line - 1] ?? '').match(/^\s{0,3}(#{1,6})(?:\s+|$)/)?.[1].length ?? 0
+  const tableSelection = tableOpen && editorId.current === session.id && editor.current ? selectedTable(editor.current) : null
+  const tableContext = tableSelection ? tableAt(tableSelection.source, tableSelection.position) : null
   const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = tabIndexForKey(workspace.tabs.length, index, event.key)
     if (next === null) return
@@ -697,10 +788,19 @@ export default function App() {
     {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice || session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>重新载入磁盘文件</button><button disabled={busy} onClick={() => void saveAs()}>将当前内容另存副本</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>重试</button><button disabled={busy} onClick={() => void saveAs()}>另存为</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
     {drafts.length > 0 && <div className="recovery-strip"><span>发现 {drafts.length} 份可恢复草稿</span>{drafts.map(draft => <button disabled={busy} key={draft.key} onClick={() => void restore(draft)}>恢复 {documentName(draft.path)} · {new Date(draft.updatedAt).toLocaleString()}{draft.path ? ` · 磁盘 ${draft.diskModifiedAt ? new Date(draft.diskModifiedAt).toLocaleString() : '文件不可用'}` : ''}</button>)}<button className="plain" onClick={() => setDrafts([])}>稍后</button></div>}
     <div className="toolbar"><div className="tool-group"><button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button><button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>搜索</button><button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>目录</button><select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select><button disabled={busy} onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button><button disabled={busy} onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button><button disabled={busy} onClick={() => wrapSelection('`')} title="行内代码">{'</>'}</button><button disabled={busy} onClick={() => wrapSelection('[', '](https://)')} title="链接">链接</button>
-      <div className="table-tool"><button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格</button>{tableOpen && <form className="table-picker" onSubmit={event => { event.preventDefault(); insertBlock(createTable(tableColumns, tableRows)) }}><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>}</div>
-      <select aria-label="列表格式" disabled={busy} value="" onChange={event => changeList(event.target.value as ListKind)}><option value="" disabled>列表</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select><button disabled={busy} onClick={() => insertBlock(blockTemplate('quote'))}>引用</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('code'))}>代码块</button><button onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)">⌕</button></div><div className="toolbar-right"><select aria-label="外观主题" value={themePreference} onChange={event => setThemePreference(event.target.value as ThemePreference)}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select><button className={previewVisible ? 'selected' : ''} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '隐藏预览' : '显示预览'}</button></div></div>
+      <div className="table-tool"><button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格</button>{tableOpen && <div className="table-picker">
+        {tableContext && <div className="table-edit-actions">
+          <strong>编辑当前表格</strong>
+          {!tableContext.editable && <p>此表格有额外单元格，无法安全编辑。</p>}
+          <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runTableAction('insert-row')}>下方插入行</button><button type="button" disabled={busy || !tableContext.editable || tableContext.row === 0} onClick={() => runTableAction('delete-row')}>删除当前行</button></div>
+          <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runTableAction('insert-column')}>右侧插入列</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runTableAction('delete-column')}>删除当前列</button></div>
+          <select aria-label="当前列对齐" disabled={busy || !tableContext.editable} value="" onChange={event => { runTableAction(event.target.value as TableAction); event.target.value = '' }}><option value="" disabled>设置当前列对齐</option><option value="align-default">默认</option><option value="align-left">左对齐</option><option value="align-center">居中</option><option value="align-right">右对齐</option></select>
+        </div>}
+        <form onSubmit={event => { event.preventDefault(); insertBlock(createTable(tableColumns, tableRows)) }}><strong>插入新表格</strong><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>
+      </div>}</div>
+      <select aria-label="列表格式" disabled={busy} value="" onChange={event => changeList(event.target.value as ListKind)}><option value="" disabled>列表</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select><button disabled={busy} onClick={() => insertBlock(blockTemplate('quote'))}>引用</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('code'))}>代码块</button><button onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)">⌕</button></div><div className="toolbar-right"><button className={focusMode ? 'selected' : ''} aria-pressed={focusMode} onClick={() => setFocusMode(value => !value)}>专注模式</button><button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => setTypewriterMode(value => !value)}>打字机模式</button><select aria-label="外观主题" value={themePreference} onChange={event => setThemePreference(event.target.value as ThemePreference)}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select><button className={previewVisible ? 'selected' : ''} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '隐藏预览' : '显示预览'}</button></div></div>
     <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
-      {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={preview?.outline} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
+      {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
       <section className="editor-pane" id="document-editor"><div className="pane-label">编辑器 <span>MARKDOWN</span></div><div className="editor-host" ref={editorHost} /></section>
       {previewVisible && <section className="preview-pane"><div className="pane-label">实时预览 <span>{preview ? 'PREVIEW' : '更新中'}</span></div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll} dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} />}</section>}
     </main>
