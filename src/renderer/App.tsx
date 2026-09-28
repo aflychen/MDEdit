@@ -62,6 +62,15 @@ function absoluteTableCommand(command: TableCommand, offset: number): TableComma
   return { anchor: command.anchor + offset, changes: command.changes && { from: command.changes.from + offset, to: command.changes.to + offset, insert: command.changes.insert } }
 }
 
+function positionMenu(menu: HTMLDetailsElement) {
+  const bounds = menu.getBoundingClientRect()
+  const below = window.innerHeight - bounds.bottom - 8
+  const above = bounds.top - 8
+  const openUpward = below < 240 && above > below
+  menu.classList.toggle('open-upward', openUpward)
+  menu.style.setProperty('--menu-available-height', `${Math.max(64, Math.floor(openUpward ? above : below))}px`)
+}
+
 export default function App() {
   const [workspace, setWorkspace] = useState(initialWorkspace)
   const workspaceRef = useRef(workspace)
@@ -91,6 +100,9 @@ export default function App() {
   const [tableOpen, setTableOpen] = useState(false)
   const [tableColumns, setTableColumns] = useState(3)
   const [tableRows, setTableRows] = useState(2)
+  const fileMenu = useRef<HTMLDetailsElement>(null)
+  const insertMenu = useRef<HTMLDetailsElement>(null)
+  const viewMenu = useRef<HTMLDetailsElement>(null)
   const editorHost = useRef<HTMLDivElement>(null)
   const previewHost = useRef<HTMLDivElement>(null)
   const editor = useRef<EditorView | null>(null)
@@ -130,6 +142,35 @@ export default function App() {
       typewriterBehavior.current.reconfigure(typewriterMode ? typewriterModeExtension : [])
     ] })
   }, [focusMode, typewriterMode])
+  useEffect(() => {
+    const menus = () => [fileMenu.current, insertMenu.current, viewMenu.current]
+    const onResize = () => menus().forEach(menu => { if (menu?.open) positionMenu(menu) })
+    const onPointerDown = (event: PointerEvent) => {
+      if (menus().some(menu => menu?.contains(event.target as Node))) return
+      menus().forEach(menu => { if (menu) menu.open = false })
+      setTableOpen(false)
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const openMenu = menus().find(menu => menu?.open)
+      if (!openMenu) return
+      event.preventDefault()
+      openMenu.open = false
+      openMenu.querySelector<HTMLElement>('summary')?.focus()
+      setTableOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onEscape)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onEscape)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [])
+  useLayoutEffect(() => {
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu?.open) positionMenu(menu)
+  }, [notice, session.error, drafts.length])
 
   const changeWorkspace = useCallback((change: (current: TabWorkspace) => TabWorkspace) => {
     const next = change(workspaceRef.current)
@@ -775,11 +816,37 @@ export default function App() {
     changeWorkspace(state => activateTab(state, workspace.tabs[next].id))
     target?.focus()
   }
+  const closeMenus = () => {
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu) menu.open = false
+    setTableOpen(false)
+  }
+  const runFromMenu = (action: () => void) => { closeMenus(); action() }
+  const onMenuToggle = (opened: HTMLDetailsElement) => {
+    if (!opened.open) return
+    positionMenu(opened)
+    for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current]) if (menu && menu !== opened) menu.open = false
+    if (opened !== insertMenu.current) setTableOpen(false)
+  }
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
-      <div className="document-title"><strong>{documentName(session.path)}</strong><span className={`save-status status-${session.saveState}`}><i />{statusLabel(session)}</span></div>
-      <div className="top-actions"><button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button><button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())}>打开</button><button disabled={busy} onClick={() => void chooseFolder()}>打开文件夹</button><button disabled={busy} onClick={() => void saveNow(session.id, true)}>保存</button><button disabled={busy} className="primary" onClick={() => void saveAs()}>另存为</button><button disabled={busy} onClick={() => void exportCurrent('html')}>导出 HTML</button><button disabled={busy} onClick={() => void exportCurrent('pdf')}>导出 PDF</button></div>
+      <span className={`save-status status-${session.saveState}`} role="status" aria-live="polite"><i />{statusLabel(session)}</span>
+      <div className="top-actions">
+        <button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button>
+        <button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())} title="打开 (⌘/Ctrl+O)">打开</button>
+        <button disabled={busy} className="primary" onClick={() => void saveNow(session.id, true)} title="保存 (⌘/Ctrl+S)">保存</button>
+        <details className="app-menu file-menu" ref={fileMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
+          <summary aria-label="文件操作">文件</summary>
+          <div className="menu-panel">
+            <button disabled={busy} onClick={() => runFromMenu(() => void chooseFolder())}>打开文件夹</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => void saveAs())}>另存为…</button>
+            <div className="menu-separator" />
+            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('html'))}>导出 HTML…</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('pdf'))}>导出 PDF…</button>
+            {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">最近文件</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path)}<small>{path}</small></button>)}</>}
+          </div>
+        </details>
+      </div>
     </header>
     <nav className="tabbar" aria-label="文档标签"><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
       <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? '未命名文档'} · ${statusLabel(tab)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path)}</span></button>
@@ -787,24 +854,58 @@ export default function App() {
     </div>)}</div><button disabled={busy} className="new-tab" aria-label="新建文档标签" onClick={newDocument}>＋</button></nav>
     {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice || session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>重新载入磁盘文件</button><button disabled={busy} onClick={() => void saveAs()}>将当前内容另存副本</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>重试</button><button disabled={busy} onClick={() => void saveAs()}>另存为</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
     {drafts.length > 0 && <div className="recovery-strip"><span>发现 {drafts.length} 份可恢复草稿</span>{drafts.map(draft => <button disabled={busy} key={draft.key} onClick={() => void restore(draft)}>恢复 {documentName(draft.path)} · {new Date(draft.updatedAt).toLocaleString()}{draft.path ? ` · 磁盘 ${draft.diskModifiedAt ? new Date(draft.diskModifiedAt).toLocaleString() : '文件不可用'}` : ''}</button>)}<button className="plain" onClick={() => setDrafts([])}>稍后</button></div>}
-    <div className="toolbar"><div className="tool-group"><button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button><button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>搜索</button><button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>目录</button><select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select><button disabled={busy} onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button><button disabled={busy} onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button><button disabled={busy} onClick={() => wrapSelection('`')} title="行内代码">{'</>'}</button><button disabled={busy} onClick={() => wrapSelection('[', '](https://)')} title="链接">链接</button>
-      <div className="table-tool"><button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格</button>{tableOpen && <div className="table-picker">
-        {tableContext && <div className="table-edit-actions">
-          <strong>编辑当前表格</strong>
-          {!tableContext.editable && <p>此表格有额外单元格，无法安全编辑。</p>}
-          <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runTableAction('insert-row')}>下方插入行</button><button type="button" disabled={busy || !tableContext.editable || tableContext.row === 0} onClick={() => runTableAction('delete-row')}>删除当前行</button></div>
-          <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runTableAction('insert-column')}>右侧插入列</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runTableAction('delete-column')}>删除当前列</button></div>
-          <select aria-label="当前列对齐" disabled={busy || !tableContext.editable} value="" onChange={event => { runTableAction(event.target.value as TableAction); event.target.value = '' }}><option value="" disabled>设置当前列对齐</option><option value="align-default">默认</option><option value="align-left">左对齐</option><option value="align-center">居中</option><option value="align-right">右对齐</option></select>
-        </div>}
-        <form onSubmit={event => { event.preventDefault(); insertBlock(createTable(tableColumns, tableRows)) }}><strong>插入新表格</strong><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>
-      </div>}</div>
-      <select aria-label="列表格式" disabled={busy} value="" onChange={event => changeList(event.target.value as ListKind)}><option value="" disabled>列表</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select><button disabled={busy} onClick={() => insertBlock(blockTemplate('quote'))}>引用</button><button disabled={busy} onClick={() => insertBlock(blockTemplate('code'))}>代码块</button><button onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)">⌕</button></div><div className="toolbar-right"><button className={focusMode ? 'selected' : ''} aria-pressed={focusMode} onClick={() => setFocusMode(value => !value)}>专注模式</button><button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => setTypewriterMode(value => !value)}>打字机模式</button><select aria-label="外观主题" value={themePreference} onChange={event => setThemePreference(event.target.value as ThemePreference)}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select><button className={previewVisible ? 'selected' : ''} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '隐藏预览' : '显示预览'}</button></div></div>
+    <div className="toolbar">
+      <div className="tool-group sidebar-tools" role="group" aria-label="侧栏">
+        <button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button>
+        <button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>搜索</button>
+        <button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>目录</button>
+      </div>
+      <div className="tool-group format-tools" role="group" aria-label="格式">
+        <select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select>
+        <button disabled={busy} aria-label="粗体" onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button>
+        <button disabled={busy} aria-label="斜体" onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button>
+        <button disabled={busy} onClick={() => wrapSelection('[', '](https://)')}>链接</button>
+        <details className="app-menu insert-menu" ref={insertMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
+          <summary>插入</summary>
+          <div className="menu-panel">
+            <button disabled={busy} onClick={() => runFromMenu(() => wrapSelection('`'))}>行内代码</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('quote')))}>引用</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('code')))}>代码块</button>
+            <label className="menu-field">列表格式<select aria-label="列表格式" disabled={busy} value="" onChange={event => runFromMenu(() => changeList(event.target.value as ListKind))}><option value="" disabled>选择列表类型</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select></label>
+            <div className="menu-separator" />
+            <button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格 <span aria-hidden="true">{tableOpen ? '▴' : '▾'}</span></button>
+            {tableOpen && <div className="table-picker">
+              {tableContext && <div className="table-edit-actions">
+                <strong>编辑当前表格</strong>
+                {!tableContext.editable && <p>此表格有额外单元格，无法安全编辑。</p>}
+                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-row'))}>下方插入行</button><button type="button" disabled={busy || !tableContext.editable || tableContext.row === 0} onClick={() => runFromMenu(() => runTableAction('delete-row'))}>删除当前行</button></div>
+                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-column'))}>右侧插入列</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runFromMenu(() => runTableAction('delete-column'))}>删除当前列</button></div>
+                <select aria-label="当前列对齐" disabled={busy || !tableContext.editable} value="" onChange={event => runFromMenu(() => runTableAction(event.target.value as TableAction))}><option value="" disabled>设置当前列对齐</option><option value="align-default">默认</option><option value="align-left">左对齐</option><option value="align-center">居中</option><option value="align-right">右对齐</option></select>
+              </div>}
+              <form onSubmit={event => { event.preventDefault(); runFromMenu(() => insertBlock(createTable(tableColumns, tableRows))) }}><strong>插入新表格</strong><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>
+            </div>}
+          </div>
+        </details>
+      </div>
+      <div className="toolbar-right">
+        <button className="find-tool" onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)" aria-label="查找与替换">⌕</button>
+        <details className="app-menu view-menu" ref={viewMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
+          <summary>视图</summary>
+          <div className="menu-panel">
+            <button className={focusMode ? 'selected' : ''} aria-pressed={focusMode} onClick={() => runFromMenu(() => setFocusMode(value => !value))}>专注模式 <span>{focusMode ? '✓' : ''}</span></button>
+            <button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => runFromMenu(() => setTypewriterMode(value => !value))}>打字机模式 <span>{typewriterMode ? '✓' : ''}</span></button>
+            <div className="menu-separator" />
+            <label className="menu-field">外观主题<select aria-label="外观主题" value={themePreference} onChange={event => runFromMenu(() => setThemePreference(event.target.value as ThemePreference))}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+          </div>
+        </details>
+        <button className={previewVisible ? 'selected preview-toggle' : 'preview-toggle'} aria-pressed={previewVisible} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '预览开启' : '预览关闭'}</button>
+      </div>
+    </div>
     <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
       {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
-      <section className="editor-pane" id="document-editor"><div className="pane-label">编辑器 <span>MARKDOWN</span></div><div className="editor-host" ref={editorHost} /></section>
-      {previewVisible && <section className="preview-pane"><div className="pane-label">实时预览 <span>{preview ? 'PREVIEW' : '更新中'}</span></div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll} dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} />}</section>}
+      <section className="editor-pane" id="document-editor"><div className="pane-label">编辑</div><div className="editor-host" ref={editorHost} /></section>
+      {previewVisible && <section className="preview-pane"><div className="pane-label">预览 {preview ? '' : <span>更新中…</span>}</div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} /></div>}</section>}
     </main>
     <footer className="statusbar"><span>{session.path ?? '本地草稿 · 尚未指定文件'}</span><div><span>{preview?.words ?? '…'} 字</span><span>第 {cursor.line} 行，第 {cursor.column} 列</span><span>UTF-8 · {session.lineEnding.toUpperCase()}</span></div></footer>
-    {recent.length > 0 && <aside className="recent-menu"><details><summary>最近文件</summary><div>{recent.map(path => <button disabled={busy} key={path} onClick={() => void openDocument(() => window.mdedit.openRecent(path))}>{documentName(path)}<small>{path}</small></button>)}</div></details></aside>}
   </div>
 }
