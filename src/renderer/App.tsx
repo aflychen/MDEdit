@@ -5,6 +5,7 @@ import { syntaxTree } from '@codemirror/language'
 import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { openSearchPanel } from '@codemirror/search'
+import { localizeAppError } from '../shared/error-messages'
 import { parseLanguage, text, type Language, type MessageKey } from '../shared/language'
 import iconUrl from '../../assets/icon.svg'
 import type { Draft, OpenedDocument, WorkspaceSearchResult } from '../shared/contracts'
@@ -48,7 +49,7 @@ const imageAlt = (name: string, language: Language) => name.replace(/\.[^.]+$/, 
 type AppNotice = { key: MessageKey; values?: Record<string, string | number> } | { raw: string }
 const noted = (key: MessageKey, values?: Record<string, string | number>): AppNotice => ({ key, values })
 const rawNotice = (error: unknown): AppNotice => ({ raw: error instanceof Error ? error.message : String(error) })
-interface PreviewSnapshot { sessionId: number; revision: number; html?: string; outline?: OutlineHeading[]; words?: number; error?: string }
+interface PreviewSnapshot { sessionId: number; revision: number; language: Language; html?: string; outline?: OutlineHeading[]; words?: number; error?: string }
 interface EditorSnapshot { state: EditorState; top: number; left: number }
 
 function selectedTable(view: EditorView): { source: string; position: number; offset: number } | null {
@@ -110,6 +111,7 @@ export default function App() {
   const languageRef = useRef(language)
   languageRef.current = language
   const t = (key: MessageKey, values?: Record<string, string | number>) => text(language, key, values)
+  const localizedError = (message: string) => localizeAppError(language, message)
   const [pdfOptions, setPdfOptions] = useState<PdfExportOptions>(() => {
     try { return parsePdfExportOptions(JSON.parse(localStorage.getItem('mdedit-pdf-options') ?? 'null')) }
     catch { return { ...DEFAULT_PDF_EXPORT_OPTIONS } }
@@ -122,7 +124,7 @@ export default function App() {
   const [previews, setPreviews] = useState<Record<number, PreviewSnapshot>>({})
   const previewsRef = useRef(previews)
   const lastPreview = previews[session.id]
-  const preview = lastPreview?.revision === session.revision ? lastPreview : undefined
+  const preview = lastPreview?.revision === session.revision && lastPreview.language === language ? lastPreview : undefined
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
   const [activeSectionLine, setActiveSectionLine] = useState(1)
   const [recent, setRecent] = useState<string[]>([])
@@ -168,6 +170,7 @@ export default function App() {
   }, [resolvedTheme, themePreference])
   useEffect(() => {
     document.documentElement.lang = language
+    void window.mdedit.setLanguage(language).catch(() => undefined)
     try { localStorage.setItem('mdedit-language', language) } catch { /* Preference storage may be unavailable. */ }
   }, [language])
   useEffect(() => {
@@ -291,7 +294,7 @@ export default function App() {
       const current = getSession(id)
       if (!current) return
       const { buildExportBody } = await import('./export-content')
-      const body = await buildExportBody(current.text, current.path)
+      const body = await buildExportBody(current.text, current.path, languageRef.current)
       const target = await window.mdedit.exportDocument(format, documentName(current.path, languageRef.current), body, format === 'pdf' ? pdfOptions : undefined)
       if (target) setNotice(noted('notice.exported', { path: target }))
     } catch (error) {
@@ -690,15 +693,15 @@ export default function App() {
     instance.onmessage = (event: MessageEvent<PreviewSnapshot>) => {
       const result = event.data
       const current = getSession(result.sessionId)
-      if (!current || current.revision !== result.revision) return
+      if (!current || current.revision !== result.revision || result.language !== languageRef.current) return
       setPreviews(state => { const next = { ...state, [result.sessionId]: result }; previewsRef.current = next; return next })
     }
     return () => { instance.terminate(); worker.current = null }
   }, [getSession])
   useEffect(() => {
-    const timer = setTimeout(() => worker.current?.postMessage({ sessionId: session.id, revision: session.revision, text: session.text }), 150)
+    const timer = setTimeout(() => worker.current?.postMessage({ sessionId: session.id, revision: session.revision, text: session.text, language }), 150)
     return () => clearTimeout(timer)
-  }, [session.id, session.revision, session.text])
+  }, [session.id, session.revision, session.text, language])
   useEffect(() => {
     const timer = setInterval(() => {
       for (const tab of workspaceRef.current.tabs) {
@@ -745,11 +748,11 @@ export default function App() {
     const root = previewHost.current
     if (!root) return
     let active = true
-    void renderMermaidBlocks(root, resolvedTheme, () => active).catch(error => {
+    void renderMermaidBlocks(root, resolvedTheme, () => active, language).catch(error => {
       if (active) setNotice(noted('notice.diagramPreviewFailed', { error: String(error) }))
     })
     return () => { active = false }
-  }, [lastPreview?.html, session.id, previewVisible, resolvedTheme])
+  }, [lastPreview?.html, session.id, previewVisible, resolvedTheme, language])
   useEffect(() => {
     void window.mdedit.recentFiles().then(setRecent)
     void window.mdedit.listDrafts().then(setDrafts)
@@ -913,7 +916,7 @@ export default function App() {
         </div>
       </details>}
     </nav>
-    {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice ? 'key' in notice ? t(notice.key, notice.values) : notice.raw : session.error === 'MIXED_LINE_ENDING' ? t('notice.mixedLineError') : session.error === 'DRAFT_DISK_CHANGED' ? t('notice.draftDiskChanged') : session.error === 'EXTERNAL_CHANGED' ? t('notice.externalChanged') : session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>{t('tabs.reloadDisk')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('tabs.saveCopy')}</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>{t('tabs.retry')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('menu.saveAs')}</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
+    {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice ? 'key' in notice ? t(notice.key, notice.values) : localizedError(notice.raw) : session.error === 'MIXED_LINE_ENDING' ? t('notice.mixedLineError') : session.error === 'DRAFT_DISK_CHANGED' ? t('notice.draftDiskChanged') : session.error === 'EXTERNAL_CHANGED' ? t('notice.externalChanged') : session.error ? localizedError(session.error) : null}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>{t('tabs.reloadDisk')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('tabs.saveCopy')}</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>{t('tabs.retry')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('menu.saveAs')}</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
     <div className="toolbar">
       <div className="tool-group sidebar-tools" role="group" aria-label={t('toolbar.sidebar')}>
         <button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>{t('sidebar.files')}</button>

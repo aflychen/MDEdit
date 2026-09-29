@@ -8,6 +8,7 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api: DesktopApi = {
+  setLanguage: language => invoke('set-language', language),
   exportDocument: (format, title, body, pdfOptions) => invoke('export-document', format, title, body, pdfOptions),
   chooseWorkspaceFolder: () => invoke('choose-workspace-folder'),
   listWorkspaceDirectory: path => invoke('list-workspace-directory', path),

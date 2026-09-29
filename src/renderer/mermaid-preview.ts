@@ -1,10 +1,11 @@
+import { text, type Language } from '../shared/language'
 import type { ResolvedTheme } from './theme'
 
-function showDiagramError(target: HTMLElement, source: string, error: unknown): void {
+function showDiagramError(target: HTMLElement, source: string, error: unknown, language: Language): void {
   const wrapper = document.createElement('div')
   wrapper.className = 'mermaid-error'
   const message = document.createElement('span')
-  message.textContent = `图表无法渲染：${(error instanceof Error ? error.message : String(error)).slice(0, 240)}`
+  message.textContent = text(language, 'pane.diagramFailed', { error: (error instanceof Error ? error.message : String(error)).slice(0, 240) })
   const code = document.createElement('pre')
   code.textContent = source
   wrapper.append(message, code)
@@ -13,13 +14,13 @@ function showDiagramError(target: HTMLElement, source: string, error: unknown): 
 
 let renderQueue: Promise<void> = Promise.resolve()
 
-export function renderMermaidBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean): Promise<void> {
-  const current = renderQueue.then(() => renderBlocks(root, theme, isActive))
+export function renderMermaidBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean, language: Language = 'zh-CN'): Promise<void> {
+  const current = renderQueue.then(() => renderBlocks(root, theme, isActive, language))
   renderQueue = current.catch(() => undefined)
   return current
 }
 
-async function renderBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean): Promise<void> {
+async function renderBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: () => boolean, language: Language): Promise<void> {
   if (!isActive()) return
   const blocks = Array.from(root.querySelectorAll<HTMLElement>('pre')).filter(block => block.querySelector('code.language-mermaid'))
   if (!blocks.length) return
@@ -29,7 +30,7 @@ async function renderBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: (
     if (!isActive()) return
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: theme === 'dark' ? 'dark' : 'default', suppressErrorRendering: true, maxTextSize: 50_000 })
   } catch (error) {
-    if (isActive()) for (const block of blocks) showDiagramError(block, block.querySelector('code')?.textContent ?? '', error)
+    if (isActive()) for (const block of blocks) showDiagramError(block, block.querySelector('code')?.textContent ?? '', error, language)
     return
   }
   for (const block of blocks) {
@@ -40,11 +41,11 @@ async function renderBlocks(root: HTMLElement, theme: ResolvedTheme, isActive: (
     diagram.textContent = source
     block.replaceWith(diagram)
     try {
-      if (!source.trim() || source.length > 50_000) throw new Error('图表内容为空或超过 50,000 字符')
+      if (!source.trim() || source.length > 50_000) throw new Error(text(language, 'pane.diagramEmpty'))
       await mermaid.run({ nodes: [diagram], suppressErrors: true })
-      if (isActive() && diagram.isConnected && !diagram.querySelector('svg')) throw new Error('语法无效')
+      if (isActive() && diagram.isConnected && !diagram.querySelector('svg')) throw new Error(text(language, 'pane.diagramInvalid'))
     } catch (error) {
-      if (isActive() && diagram.isConnected) showDiagramError(diagram, source, error)
+      if (isActive() && diagram.isConnected) showDiagramError(diagram, source, error, language)
     }
   }
 }

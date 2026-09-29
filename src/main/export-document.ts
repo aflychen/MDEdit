@@ -1,3 +1,4 @@
+import type { Language } from '../shared/language'
 import { BrowserWindow, dialog, session } from 'electron'
 import { constants } from 'node:fs'
 import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -56,10 +57,10 @@ async function katexStyles(): Promise<string> {
   return css
 }
 
-async function standaloneHtml(title: string, body: string, pdfOptions?: PdfExportOptions): Promise<string> {
+async function standaloneHtml(title: string, body: string, language: Language, pdfOptions?: PdfExportOptions): Promise<string> {
   const css = await katexStyles()
   const printStyles = pdfPageStyles(pdfOptions ?? DEFAULT_PDF_EXPORT_OPTIONS)
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(title)}</title><style>${printStyles}\n${pageStyles}\n${css}</style></head><body><article class="document">${body}</article></body></html>`
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(title)}</title><style>${printStyles}\n${pageStyles}\n${css}</style></head><body><article class="document">${body}</article></body></html>`
 }
 
 async function writeAtomic(path: string, content: string | Buffer): Promise<void> {
@@ -91,16 +92,16 @@ async function renderPdf(html: string, options: PdfExportOptions): Promise<Buffe
   }
 }
 
-export async function exportDocument(owner: BrowserWindow, format: ExportFormat, title: string, body: string, pdfOptions?: unknown): Promise<string | null> {
+export async function exportDocument(owner: BrowserWindow, format: ExportFormat, title: string, body: string, pdfOptions?: unknown, language: Language = 'zh-CN'): Promise<string | null> {
   if (format !== 'html' && format !== 'pdf') throw new Error('不支持的导出格式')
   if (typeof title !== 'string' || typeof body !== 'string' || title.length > 500 || body.length > 100_000_000) throw new Error('导出内容无效或过大')
   const options = format === 'pdf' ? parsePdfExportOptions(pdfOptions) : undefined
   const extension = `.${format}`
-  const name = title.replace(/\.md$/i, '') || '未命名文档'
+  const name = title.replace(/\.md$/i, '') || (language === 'en' ? 'Untitled' : '未命名文档')
   const result = await dialog.showSaveDialog(owner, { defaultPath: `${name}${extension}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   if (result.canceled || !result.filePath) return null
   if (extname(result.filePath).toLowerCase() !== extension) throw new Error(`请使用 ${extension} 扩展名保存导出文件`)
-  const html = await standaloneHtml(title, body, options)
+  const html = await standaloneHtml(title, body, language, options)
   await writeAtomic(result.filePath, options ? await renderPdf(html, options) : html)
   return result.filePath
 }

@@ -1,3 +1,4 @@
+import type { Language } from './language'
 import type { PdfExportOptions } from './pdf-export-options'
 
 export type LineEnding = 'lf' | 'crlf' | 'mixed'
@@ -49,6 +50,7 @@ export interface WorkspaceSearchResponse {
 }
 
 export interface DesktopApi {
+  setLanguage(language: Language): Promise<void>
   exportDocument(format: 'html' | 'pdf', title: string, body: string, pdfOptions?: PdfExportOptions): Promise<string | null>
   chooseWorkspaceFolder(): Promise<string | null>
   listWorkspaceDirectory(path: string): Promise<WorkspaceEntry[]>

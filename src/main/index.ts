@@ -10,6 +10,8 @@ import { DraftStore } from './drafts'
 import { WorkspaceFolder } from './workspace-folder'
 import { exportDocument, type ExportFormat } from './export-document'
 import type { Draft, ImageImport, OpenedDocument } from '../shared/contracts'
+import type { Language } from '../shared/language'
+import { defaultUntitledFileName, localizeAppError } from '../shared/error-messages'
 
 const documents = new DocumentAccess()
 const workspaceFolder = new WorkspaceFolder()
@@ -20,17 +22,18 @@ const watchTimers = new Map<string, NodeJS.Timeout>()
 const documentOperations = new DocumentOperationQueue()
 let recent: string[] = []
 let closing = false
+let currentLanguage: Language = 'en'
 const pendingSystemPaths = new Set<string>()
 
 function errorPayload(error: unknown): { code: string; message: string } {
-  if (error instanceof DocumentError) return { code: error.code, message: error.message }
-  if (error instanceof Error) return { code: 'IO_ERROR', message: error.message }
+  if (error instanceof DocumentError) return { code: error.code, message: localizeAppError(currentLanguage, error.message) }
+  if (error instanceof Error) return { code: 'IO_ERROR', message: localizeAppError(currentLanguage, error.message) }
   return { code: 'IO_ERROR', message: String(error) }
 }
 
 function register<T extends unknown[], R>(name: string, handler: (...args: T) => Promise<R>): void {
   ipcMain.handle(name, async (event, ...args: T) => {
-    if (!window || event.sender !== window.webContents) return { ok: false, error: { code: 'FORBIDDEN', message: '无效的窗口请求' } }
+    if (!window || event.sender !== window.webContents) return { ok: false, error: { code: 'FORBIDDEN', message: localizeAppError(currentLanguage, '无效的窗口请求') } }
     try { return { ok: true, value: await handler(...args) } }
     catch (error) { return { ok: false, error: errorPayload(error) } }
   })
@@ -140,6 +143,11 @@ else {
   })
 }
 
+register('set-language', async (language: Language) => {
+  if (language !== 'en' && language !== 'zh-CN') throw new DocumentError('INVALID_LANGUAGE', 'Invalid language')
+  currentLanguage = language
+})
+
 register('choose-workspace-folder', async () => {
   const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] })
   return result.canceled ? null : workspaceFolder.select(result.filePaths[0])
@@ -174,7 +182,7 @@ register('open-relative', async (basePath: string, path: string) => {
 register('choose-save', async (text: string, format: { hasBom: boolean; lineEnding: 'lf' | 'crlf' | 'mixed' }, sourcePath: string | null) => {
   if (sourcePath && !documents.isOpen(sourcePath)) throw new DocumentError('FORBIDDEN', '文档未打开')
   const result = await dialog.showSaveDialog(window!, {
-    defaultPath: sourcePath ? basename(sourcePath).replace(/\.md$/i, '-copy.md') : '未命名.md',
+    defaultPath: sourcePath ? basename(sourcePath).replace(/\.md$/i, '-copy.md') : defaultUntitledFileName(currentLanguage),
     filters: [{ name: 'Markdown', extensions: ['md'] }]
   })
   if (result.canceled || !result.filePath) return null
@@ -186,7 +194,7 @@ register('choose-save', async (text: string, format: { hasBom: boolean; lineEndi
   watchDocument(opened.path)
   return opened
 })
-register('export-document', async (format: ExportFormat, title: string, body: string, pdfOptions?: unknown) => exportDocument(window!, format, title, body, pdfOptions))
+register('export-document', async (format: ExportFormat, title: string, body: string, pdfOptions?: unknown) => exportDocument(window!, format, title, body, pdfOptions, currentLanguage))
 register('save', async (path: string, text: string, revision: number, editedAt: number, allowMixed: boolean) => {
   const result = await documentOperations.run(async () => {
     documents.assertOpen(path)

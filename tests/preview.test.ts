@@ -17,6 +17,13 @@ describe('Markdown preview', () => {
     expect(html).toContain('远程图片未加载')
   })
 
+  it('renders application image placeholders in English', () => {
+    const html = renderMarkdown('![remote](https://example.com/a.png)', 'en')
+    expect(html).toContain('Remote image not loaded: remote')
+    expect(html).not.toContain('远程图片未加载')
+    expect(html).not.toContain('src="https:')
+  })
+
   it('marks local images for a controlled resource lookup', () => {
     const html = renderMarkdown('![chart](images/chart.png)')
     expect(html).toContain('data-local-src="images/chart.png"')

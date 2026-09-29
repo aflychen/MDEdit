@@ -1,4 +1,5 @@
 import { unified } from 'unified'
+import { text, type Language } from '../shared/language'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -57,20 +58,20 @@ function safeLocalPath(value: string): boolean {
     !/^[a-z][a-z\d+.-]*:/i.test(decoded) && !decoded.split('/').includes('..')
 }
 
-function constrainImages() {
+function constrainImages(language: Language) {
   return (tree: NodeLike): void => {
     const visit = (node: NodeLike): void => {
       if (node.children) {
         node.children = node.children.map(child => {
           if (child.type !== 'element' || child.tagName !== 'img') return child
           const src = String(child.properties?.src ?? '')
-          const alt = String(child.properties?.alt ?? '图片')
+          const alt = String(child.properties?.alt ?? text(language, 'common.image'))
           if (safeLocalPath(src)) {
             return { ...child, properties: { alt, 'data-local-src': src } }
           }
           return {
             type: 'element', tagName: 'span', properties: { className: ['image-placeholder'] },
-            children: [{ type: 'text', value: src.startsWith('https:') || src.startsWith('http:') ? `远程图片未加载：${alt}` : `图片路径受限：${alt}` }]
+            children: [{ type: 'text', value: src.startsWith('https:') || src.startsWith('http:') ? text(language, 'pane.remoteImageBlocked', { name: alt }) : text(language, 'pane.imagePathBlocked', { name: alt }) }]
           }
         })
         node.children.forEach(visit)
@@ -80,7 +81,8 @@ function constrainImages() {
   }
 }
 
-const processor = unified()
+function createProcessor(language: Language) {
+  return unified()
   .use(remarkParse)
   .use(remarkGfm)
   .use(remarkMath)
@@ -94,16 +96,20 @@ const processor = unified()
       span: [...(defaultSchema.attributes?.span ?? []), ['className', /^hljs-[a-z][a-z0-9_-]*$/]]
     }
   })
-  .use(constrainImages)
+  .use(() => constrainImages(language))
   .use(rehypeKatex, { trust: false, maxSize: 20, maxExpand: 1000 })
   .use(rehypeStringify)
-
-export function renderMarkdown(text: string): string {
-  return renderPreview(text).html
 }
 
-export function renderPreview(text: string): PreviewResult {
-  const tree = processor.parse(text)
+const processors = { en: createProcessor('en'), 'zh-CN': createProcessor('zh-CN') }
+
+export function renderMarkdown(source: string, language: Language = 'zh-CN'): string {
+  return renderPreview(source, language).html
+}
+
+export function renderPreview(source: string, language: Language = 'zh-CN'): PreviewResult {
+  const processor = processors[language]
+  const tree = processor.parse(source)
   const outline: OutlineHeading[] = []
   collectOutline(tree as MarkdownNode, outline)
   return { html: String(processor.stringify(processor.runSync(tree))), outline }
