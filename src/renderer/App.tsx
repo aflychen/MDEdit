@@ -665,6 +665,7 @@ export default function App() {
     view.setState(saved?.state ?? EditorState.create({ doc: session.text, extensions: editorExtensions.current }))
     view.dispatch({ effects: editability.current.reconfigure(EditorState.readOnly.of(operationLock.current)) })
     view.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
+    view.dispatch({ effects: searchLanguageCompartment.current.reconfigure(searchLanguage.of(languageRef.current)) })
     view.dispatch({ effects: focusAppearance.current.reconfigure(focusMode ? focusModeExtension : []) })
     view.dispatch({ effects: typewriterBehavior.current.reconfigure(typewriterMode ? typewriterModeExtension : []) })
     view.scrollDOM.scrollTop = saved?.top ?? 0
@@ -725,7 +726,7 @@ export default function App() {
     scrollGuard.current = true
     root.scrollTop = previewPositions.current.get(session.id) ?? 0
     requestAnimationFrame(() => { scrollGuard.current = false })
-  }, [session.id, previewVisible, lastPreview?.html, resolvedTheme])
+  }, [session.id, previewVisible, lastPreview?.html, lastPreview?.language, resolvedTheme, language])
   useEffect(() => {
     const root = previewHost.current
     if (!root) return
@@ -748,7 +749,7 @@ export default function App() {
       })
     }
     return () => { active = false }
-  }, [lastPreview?.html, session.id, session.path, previewVisible, resolvedTheme, language])
+  }, [lastPreview?.html, lastPreview?.language, session.id, session.path, previewVisible, resolvedTheme, language])
   useEffect(() => {
     const root = previewHost.current
     if (!root) return
@@ -757,7 +758,7 @@ export default function App() {
       if (active) setNotice(noted('notice.diagramPreviewFailed', { error: String(error) }))
     })
     return () => { active = false }
-  }, [lastPreview?.html, session.id, previewVisible, resolvedTheme, language])
+  }, [lastPreview?.html, lastPreview?.language, session.id, previewVisible, resolvedTheme, language])
   useEffect(() => {
     void window.mdedit.recentFiles().then(setRecent)
     void window.mdedit.listDrafts().then(setDrafts)
@@ -973,7 +974,7 @@ export default function App() {
     <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
       {sidebarView && <WorkspaceSidebar language={language} key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
       <section className="editor-pane" id="document-editor"><div className="pane-label">{t('pane.editor')}</div><div className="editor-host" ref={editorHost} /></section>
-      {previewVisible && <section className="preview-pane"><div className="pane-label">{t('pane.preview')} {preview ? '' : <span>{t('pane.updating')}</span>}</div>{preview?.error ? <div className="preview-error">{t('pane.previewFailed', { error: preview.error })}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} /></div>}</section>}
+      {previewVisible && <section className="preview-pane"><div className="pane-label">{t('pane.preview')} {preview ? '' : <span>{t('pane.updating')}</span>}</div>{preview?.error ? <div className="preview-error">{t('pane.previewFailed', { error: preview.error })}</div> : <div key={`${session.id}-${resolvedTheme}-${language}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.language === language ? lastPreview.html ?? '' : '' }} /></div>}</section>}
     </main>
     <footer className="statusbar"><span>{session.path ?? t('pane.localDraft')}</span><div><span>{t('pane.words', { count: preview?.words ?? '…' })}</span><span>{t('pane.cursor', { line: cursor.line, column: cursor.column })}</span><span>UTF-8 · {session.lineEnding.toUpperCase()}</span></div></footer>
   </div>
