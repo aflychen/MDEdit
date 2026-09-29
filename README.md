@@ -8,7 +8,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.7.2 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.7.3 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ### 开发
 
@@ -64,7 +64,7 @@ git push origin vX.Y.Z
 - `Cmd/Ctrl+B`、`Cmd/Ctrl+I`、`Cmd/Ctrl+K` 插入常用 Markdown 标记。
 - `Cmd/Ctrl+F` 打开文档内查找；Enter / Shift+Enter 前后跳转。展开“替换”后可单次或全部替换，面板还支持大小写、正则和整词选项；Esc 关闭。
 - 工具栏直接提供标题级别、粗体、斜体和链接；“插入”菜单提供行内代码、列表、引用、代码块和 GFM 表格。可按行列数插入表格，也可将当前行或选中的多行转换为无序列表、数字有序列表和任务列表。
-- 新安装默认英文界面；点击顶栏独立的语言按钮可在 English 与简体中文间切换，并记住选择。
+- 新安装默认英文界面；顶栏语言按钮显示切换后的目标语言（英文界面显示“中文”，中文界面显示“English”），点击后立即切换并记住选择。
 - 工具栏可切换编辑、双栏和纯预览布局；双栏同时显示编辑与预览，纯预览隐藏源码编辑区与格式工具栏。
 - “视图”菜单可独立切换专注模式与打字机模式，并选择跟随系统、浅色或深色主题。专注模式淡化光标所在段落之外的编辑内容；打字机模式在输入时将光标行保持在编辑区中部。
 - 光标位于 GFM 表格时，Tab / Shift+Tab 在单元格间移动；在末尾单元格按 Tab 会添加正文行。“插入 → 表格”还可增删当前行列并设置当前列对齐。含额外单元格的异常表格不会被结构命令改写。
@@ -87,7 +87,7 @@ git push origin vX.Y.Z
 
 A local Markdown editor for macOS and Windows. Source editing is powered by CodeMirror 6. The preview supports CommonMark, commonly used GFM features, code block highlighting, Mermaid diagrams, and math formulas. You can browse and search Markdown documents in a local folder. Files are saved to their original `.md` paths, and recovery drafts are stored in Electron's application data directory.
 
-**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.7.2 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
+**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.7.3 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
 ## Development
 
@@ -143,7 +143,7 @@ git push origin vX.Y.Z
 - `Cmd/Ctrl+B`, `Cmd/Ctrl+I`, and `Cmd/Ctrl+K` insert common Markdown markers.
 - `Cmd/Ctrl+F` opens Find in Document. Enter and Shift+Enter move between matches. Expand Replace for one or all replacements; case, regular expression, and whole-word options are available. Escape closes the panel.
 - The toolbar keeps heading level, bold, italic, and link controls visible. The Insert menu contains inline code, lists, quotes, code blocks, and GFM tables. It can insert a table with chosen dimensions or convert the current line or selected lines to a bullet, numbered, or task list.
-- A fresh install defaults to English. Use the dedicated language button in the top bar to switch between English and Simplified Chinese; the choice is remembered.
+- A fresh install defaults to English. The language button in the top bar shows the target language (“中文” in English and “English” in Chinese); the choice is remembered.
 - Switch between Edit, Split, and Preview layouts in the toolbar. Split shows the editor and preview side by side; Preview hides the source editor and formatting toolbar.
 - The View menu contains independent Focus and Typewriter mode switches and the system/light/dark theme selector. Focus mode dims text outside the current paragraph; Typewriter mode keeps the caret line near the middle of the editor while typing.
 - In a GFM table, Tab and Shift+Tab move between cells; Tab in the final cell adds a body row. Insert → Table can also insert or delete rows and columns and set column alignment. Structural commands leave malformed tables with surplus cells unchanged.

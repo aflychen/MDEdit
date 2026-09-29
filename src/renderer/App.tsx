@@ -920,7 +920,7 @@ export default function App() {
             {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">{t('menu.recentFiles')}</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path, language)}<small>{path}</small></button>)}</>}
           </div>
         </details>
-        <button className="language-toggle" onClick={() => setLanguage(current => current === 'en' ? 'zh-CN' : 'en')} title={t('menu.switchLanguage')} aria-label={t('menu.switchLanguage')}><span aria-hidden="true">🌐</span> {language === 'en' ? 'English' : '中文'}</button>
+        <button className="language-toggle" onClick={() => setLanguage(current => current === 'en' ? 'zh-CN' : 'en')} title={t('menu.switchLanguage')} aria-label={t('menu.switchLanguage')}><span aria-hidden="true">🌐</span> {language === 'en' ? '中文' : 'English'}</button>
       </div>
     </header>
     <nav className="tabbar" aria-label={t('tabs.label')}><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
