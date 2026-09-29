@@ -17,6 +17,12 @@ describe('Markdown commands', () => {
     expect(table.text.slice(table.selectionStart, table.selectionEnd)).toBe('表头 1')
   })
 
+  it('uses the selected interface language for new table headers', () => {
+    const table = createTable(2, 1, 'en')
+    expect(table.text).toBe('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |')
+    expect(table.text.slice(table.selectionStart, table.selectionEnd)).toBe('Column 1')
+  })
+
   it('places the cursor in the first empty unordered list item', () => {
     const item = blockTemplate('list')
 

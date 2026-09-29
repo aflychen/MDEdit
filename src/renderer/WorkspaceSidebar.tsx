@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { WorkspaceEntry, WorkspaceSearchResponse, WorkspaceSearchResult } from '../shared/contracts'
 import type { OutlineHeading } from './preview'
 import { precedingIndex, visibleOutlineIndices } from './outline-navigation'
+import { text, type Language } from '../shared/language'
 
 type SidebarView = 'files' | 'search' | 'outline'
 
 interface Props {
+  language: Language
   view: SidebarView
   root: string | null
   activePath: string | null
@@ -23,7 +25,8 @@ interface Props {
 
 const nameOf = (path: string) => path.split(/[\\/]/).pop() ?? path
 
-function FileNode({ entry, activePath, busy, onOpenFile }: {
+function FileNode({ entry, activePath, busy, onOpenFile, language }: {
+  language: Language
   entry: WorkspaceEntry
   activePath: string | null
   busy: boolean
@@ -55,15 +58,15 @@ function FileNode({ entry, activePath, busy, onOpenFile }: {
       <span aria-hidden="true">{entry.kind === 'directory' ? expanded ? '▾' : '▸' : '·'}</span>{entry.name}
     </button>
     {expanded && entry.kind === 'directory' && <ul className="tree-children">
-      {loading && <li className="sidebar-muted">读取中…</li>}
+      {loading && <li className="sidebar-muted">{text(language, 'sidebar.loading')}</li>}
       {error && <li className="sidebar-error">{error}</li>}
-      {children?.length === 0 && <li className="sidebar-muted">没有 Markdown 文件</li>}
-      {children?.map(item => <FileNode key={item.path} entry={item} activePath={activePath} busy={busy} onOpenFile={onOpenFile} />)}
+      {children?.length === 0 && <li className="sidebar-muted">{text(language, 'sidebar.noMarkdown')}</li>}
+      {children?.map(item => <FileNode key={item.path} entry={item} activePath={activePath} busy={busy} onOpenFile={onOpenFile} language={language} />)}
     </ul>}
   </li>
 }
 
-export default function WorkspaceSidebar({ view, root, activePath, outline, documentId, activeLine, busy, onChooseFolder, onCloseFolder, onOpenFile, onOpenResult, onJumpHeading, onClose }: Props) {
+export default function WorkspaceSidebar({ language, view, root, activePath, outline, documentId, activeLine, busy, onChooseFolder, onCloseFolder, onOpenFile, onOpenResult, onJumpHeading, onClose }: Props) {
   const [entries, setEntries] = useState<WorkspaceEntry[]>([])
   const [treeError, setTreeError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -113,7 +116,7 @@ export default function WorkspaceSidebar({ view, root, activePath, outline, docu
     } finally { if (searchRequest.current === request) setSearching(false) }
   }
 
-  const title = { files: '文件', search: '跨文件搜索', outline: '目录' }[view]
+  const title = text(language, ({ files: 'sidebar.files', search: 'sidebar.workspaceSearch', outline: 'sidebar.outline' } as const)[view])
   const headings = outline ?? []
   const visibleHeadings = visibleOutlineIndices(headings, outlineQuery, collapsedHeadings)
   const activeHeading = precedingIndex(headings.map(heading => heading.line), activeLine)
@@ -125,23 +128,23 @@ export default function WorkspaceSidebar({ view, root, activePath, outline, docu
     return next
   })
   return <aside className="outline-pane workspace-sidebar" aria-label={title}>
-    <div className="pane-label">{title}<button aria-label={`收起${title}`} onClick={onClose}>‹</button></div>
-    {view === 'outline' && <><div className="outline-controls"><input aria-label="筛选目录标题" placeholder="筛选标题" value={outlineQuery} onChange={event => setOutlineQuery(event.target.value)} /></div><nav aria-label="当前文档标题">{headings.length ? visibleHeadings.length ? visibleHeadings.map(index => {
+    <div className="pane-label">{title}<button aria-label={text(language, 'sidebar.collapse', { title })} onClick={onClose}>‹</button></div>
+    {view === 'outline' && <><div className="outline-controls"><input aria-label={text(language, 'sidebar.filterHeadings')} placeholder={text(language, 'sidebar.filterPlaceholder')} value={outlineQuery} onChange={event => setOutlineQuery(event.target.value)} /></div><nav aria-label={text(language, 'sidebar.documentHeadings')}>{headings.length ? visibleHeadings.length ? visibleHeadings.map(index => {
       const heading = headings[index]
       const hasChildren = headings[index + 1]?.depth > heading.depth
       return <div key={`${heading.line}:${index}`} className="outline-entry" style={{ paddingLeft: `${5 + (heading.depth - 1) * 12}px` }}>
-        {hasChildren ? <button className="outline-toggle" type="button" aria-label={`${collapsedHeadings.has(index) ? '展开' : '折叠'} ${heading.text || '空标题'}`} aria-expanded={outlineQuery.trim() ? true : !collapsedHeadings.has(index)} disabled={busy || Boolean(outlineQuery.trim())} onClick={() => toggleHeading(index)}>{collapsedHeadings.has(index) && !outlineQuery.trim() ? '▸' : '▾'}</button> : <span className="outline-toggle-spacer" aria-hidden="true" />}
-        <button className={`outline-link ${index === visibleActiveHeading ? 'active' : ''}`} aria-current={index === visibleActiveHeading ? 'location' : undefined} disabled={busy} onClick={() => onJumpHeading(heading)} title={`H${heading.depth} · 第 ${heading.line} 行`}>{heading.text || '空标题'}</button>
+        {hasChildren ? <button className="outline-toggle" type="button" aria-label={text(language, collapsedHeadings.has(index) ? 'sidebar.expandHeading' : 'sidebar.collapseHeading', { title: heading.text || text(language, 'sidebar.emptyHeading') })} aria-expanded={outlineQuery.trim() ? true : !collapsedHeadings.has(index)} disabled={busy || Boolean(outlineQuery.trim())} onClick={() => toggleHeading(index)}>{collapsedHeadings.has(index) && !outlineQuery.trim() ? '▸' : '▾'}</button> : <span className="outline-toggle-spacer" aria-hidden="true" />}
+        <button className={`outline-link ${index === visibleActiveHeading ? 'active' : ''}`} aria-current={index === visibleActiveHeading ? 'location' : undefined} disabled={busy} onClick={() => onJumpHeading(heading)} title={text(language, 'sidebar.headingLine', { level: heading.depth, line: heading.line })}>{heading.text || text(language, 'sidebar.emptyHeading')}</button>
       </div>
-    }) : <p>没有匹配的标题</p> : <p>添加标题后在这里导航</p>}</nav></>}
+    }) : <p>{text(language, 'sidebar.noMatchingHeadings')}</p> : <p>{text(language, 'sidebar.addHeading')}</p>}</nav></>}
     {view === 'files' && <div className="sidebar-body">
-      <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{root ? '切换文件夹' : '选择文件夹'}</button>{root && <button onClick={onCloseFolder} disabled={busy}>关闭文件夹</button>}</div>
-      {root && <><p className="folder-name" title={root}>{nameOf(root)}</p>{treeError && <p className="sidebar-error">{treeError}</p>}<ul className="file-tree">{entries.map(entry => <FileNode key={`${root}:${entry.path}`} entry={entry} activePath={activePath} busy={busy} onOpenFile={onOpenFile} />)}</ul>{!treeError && entries.length === 0 && <p className="sidebar-muted">没有 Markdown 文件</p>}</>}
+      <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{text(language, root ? 'sidebar.switchFolder' : 'sidebar.chooseFolder')}</button>{root && <button onClick={onCloseFolder} disabled={busy}>{text(language, 'sidebar.closeFolder')}</button>}</div>
+      {root && <><p className="folder-name" title={root}>{nameOf(root)}</p>{treeError && <p className="sidebar-error">{treeError}</p>}<ul className="file-tree">{entries.map(entry => <FileNode key={`${root}:${entry.path}`} entry={entry} activePath={activePath} busy={busy} onOpenFile={onOpenFile} language={language} />)}</ul>{!treeError && entries.length === 0 && <p className="sidebar-muted">{text(language, 'sidebar.noMarkdown')}</p>}</>}
     </div>}
     {view === 'search' && <div className="sidebar-body">
-      {!root ? <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>选择文件夹后搜索</button></div> : <><form className="workspace-search" onSubmit={event => void submitSearch(event)}><input aria-label="搜索文件夹内的 Markdown" value={query} onChange={event => { searchRequest.current++; setQuery(event.target.value); setSearch(null); setSubmittedQuery(''); setSearching(false) }} placeholder="搜索 Markdown 内容" /><button type="submit" disabled={!query.trim() || searching}>{searching ? '搜索中…' : '搜索'}</button></form>
+      {!root ? <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{text(language, 'sidebar.chooseFolderToSearch')}</button></div> : <><form className="workspace-search" onSubmit={event => void submitSearch(event)}><input aria-label={text(language, 'sidebar.searchMarkdown')} value={query} onChange={event => { searchRequest.current++; setQuery(event.target.value); setSearch(null); setSubmittedQuery(''); setSearching(false) }} placeholder={text(language, 'sidebar.searchPlaceholder')} /><button type="submit" disabled={!query.trim() || searching}>{text(language, searching ? 'sidebar.searching' : 'sidebar.searchButton')}</button></form>
         {searchError && <p className="sidebar-error">{searchError}</p>}
-        {search && <><p className="search-summary">{search.results.length} 条结果{search.truncated ? ' · 仅显示前 100 条' : ''}{search.skipped ? ` · 跳过 ${search.skipped} 项` : ''}</p><ul className="search-results">{search.results.map((result, index) => <li key={`${result.path}:${result.line}:${result.column}:${index}`}><button onClick={() => onOpenResult(result, submittedQuery)} disabled={busy}><strong>{result.path}:{result.line}</strong><span>{result.snippet}</span></button></li>)}</ul></>}
+        {search && <><p className="search-summary">{text(language, 'sidebar.searchResults', { count: search.results.length })}{search.truncated ? ` · ${text(language, 'sidebar.firstHundred')}` : ''}{search.skipped ? ` · ${text(language, 'sidebar.skipped', { count: search.skipped })}` : ''}</p><ul className="search-results">{search.results.map((result, index) => <li key={`${result.path}:${result.line}:${result.column}:${index}`}><button onClick={() => onOpenResult(result, submittedQuery)} disabled={busy}><strong>{result.path}:{result.line}</strong><span>{result.snippet}</span></button></li>)}</ul></>}
       </>}
     </div>}
   </aside>

@@ -1,3 +1,4 @@
+import { text as translate, type Language } from '../shared/language'
 export type BlockKind = 'list' | 'task' | 'quote' | 'code'
 export type ListKind = 'unordered' | 'ordered' | 'task'
 
@@ -15,10 +16,10 @@ export function setHeading(_line: string, _level: 0 | 1 | 2 | 3 | 4 | 5): string
   return _level === 0 ? `${indent}${content}` : `${indent}${'#'.repeat(_level)} ${content}`
 }
 
-export function createTable(columns: number, bodyRows: number): MarkdownInsertion {
+export function createTable(columns: number, bodyRows: number, language: Language = 'zh-CN'): MarkdownInsertion {
   const columnCount = Math.max(1, Math.floor(columns))
   const rowCount = Math.max(1, Math.floor(bodyRows))
-  const header = Array.from({ length: columnCount }, (_, index) => `表头 ${index + 1}`)
+  const header = Array.from({ length: columnCount }, (_, index) => translate(language, 'insert.columnHeader', { index: index + 1 }))
   const separator = Array.from({ length: columnCount }, () => '---')
   const emptyRow = Array.from({ length: columnCount }, () => '')
   const rows = [header, separator, ...Array.from({ length: rowCount }, () => emptyRow)]

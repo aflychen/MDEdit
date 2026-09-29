@@ -5,6 +5,7 @@ import { syntaxTree } from '@codemirror/language'
 import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { openSearchPanel } from '@codemirror/search'
+import { parseLanguage, text, type Language, type MessageKey } from '../shared/language'
 import iconUrl from '../../assets/icon.svg'
 import type { Draft, OpenedDocument, WorkspaceSearchResult } from '../shared/contracts'
 import { applyEdit, beginSave, completeSave, failSave, failSaveAs, newSession, sessionFromDocument, type DocumentSession } from './session'
@@ -22,8 +23,8 @@ import { focusModeExtension, typewriterModeExtension } from './writing-mode'
 import { editTable, navigateTableCell, tableAt, type TableAction, type TableCommand } from './table-editing'
 import { DEFAULT_PDF_EXPORT_OPTIONS, parsePdfExportOptions, type PdfExportOptions, type PdfMargin, type PdfPaperSize } from '../shared/pdf-export-options'
 
-const documentName = (path: string | null) => path ? path.split(/[\\/]/).pop() ?? path : '未命名文档'
-const draftPreview = (draft: Draft) => {
+const documentName = (path: string | null, language: Language) => path ? path.split(/[\\/]/).pop() ?? path : text(language, 'tabs.untitled')
+const draftPreview = (draft: Draft, language: Language) => {
   const lines = draft.text.slice(0, 1600).split(/\r?\n/)
     .map(value => value.trim())
     .filter(value => value && value !== '---' && !value.startsWith('```'))
@@ -31,19 +32,22 @@ const draftPreview = (draft: Draft) => {
     .filter(Boolean)
   if (draft.path) {
     const directory = draft.path.match(/^(.*)[\\/][^\\/]+$/)?.[1] || draft.path
-    return { title: documentName(draft.path), detail: directory.split(/[\\/]/).filter(Boolean).slice(-2).join(' / ') || directory }
+    return { title: documentName(draft.path, language), detail: directory.split(/[\\/]/).filter(Boolean).slice(-2).join(' / ') || directory }
   }
-  const first = lines[0] || '未命名草稿'
+  const first = lines[0] || text(language, 'recovery.untitled')
   return {
     title: first,
     detail: [first.length > 60 ? first.slice(60, 140) : '', ...lines.slice(1, 3)].filter(Boolean).join(' · ').slice(0, 140)
   }
 }
-const statusLabel = (session: DocumentSession) => ({ editing: '编辑中', saving: '正在保存', saved: '已保存', error: '保存失败', conflict: '磁盘冲突' })[session.saveState]
+const statusLabel = (session: DocumentSession, language: Language) => text(language, ({ editing: 'status.editing', saving: 'status.saving', saved: 'status.saved', error: 'status.error', conflict: 'status.conflict' } as const)[session.saveState])
 const needsBackup = (session: DocumentSession) => session.revision !== session.persistedRevision || session.saveState === 'conflict' || session.saveState === 'error'
 const draftFor = (session: DocumentSession): Draft => ({ key: session.draftKey, path: session.path, text: session.text, fingerprint: session.diskFingerprint, revision: session.revision, updatedAt: session.editedAt })
 const isImageFile = (file: File) => file.type.startsWith('image/') || /\.(?:png|jpe?g|gif|webp|avif)$/i.test(file.name)
-const imageAlt = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[\[\]\\\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || '图片'
+const imageAlt = (name: string, language: Language) => name.replace(/\.[^.]+$/, '').replace(/[\[\]\\\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || text(language, 'common.image')
+type AppNotice = { key: MessageKey; values?: Record<string, string | number> } | { raw: string }
+const noted = (key: MessageKey, values?: Record<string, string | number>): AppNotice => ({ key, values })
+const rawNotice = (error: unknown): AppNotice => ({ raw: error instanceof Error ? error.message : String(error) })
 interface PreviewSnapshot { sessionId: number; revision: number; html?: string; outline?: OutlineHeading[]; words?: number; error?: string }
 interface EditorSnapshot { state: EditorState; top: number; left: number }
 
@@ -99,6 +103,13 @@ export default function App() {
     try { return parseThemePreference(localStorage.getItem('mdedit-theme')) }
     catch { return 'system' }
   })
+  const [language, setLanguage] = useState<Language>(() => {
+    try { return parseLanguage(localStorage.getItem('mdedit-language')) }
+    catch { return 'en' }
+  })
+  const languageRef = useRef(language)
+  languageRef.current = language
+  const t = (key: MessageKey, values?: Record<string, string | number>) => text(language, key, values)
   const [pdfOptions, setPdfOptions] = useState<PdfExportOptions>(() => {
     try { return parsePdfExportOptions(JSON.parse(localStorage.getItem('mdedit-pdf-options') ?? 'null')) }
     catch { return { ...DEFAULT_PDF_EXPORT_OPTIONS } }
@@ -116,7 +127,7 @@ export default function App() {
   const [activeSectionLine, setActiveSectionLine] = useState(1)
   const [recent, setRecent] = useState<string[]>([])
   const [drafts, setDrafts] = useState<Draft[]>([])
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<AppNotice | null>(null)
   const [busy, setBusy] = useState(false)
   const [tableOpen, setTableOpen] = useState(false)
   const [tableColumns, setTableColumns] = useState(3)
@@ -155,6 +166,10 @@ export default function App() {
     document.documentElement.dataset.theme = resolvedTheme
     try { localStorage.setItem('mdedit-theme', themePreference) } catch { /* Preference storage may be unavailable. */ }
   }, [resolvedTheme, themePreference])
+  useEffect(() => {
+    document.documentElement.lang = language
+    try { localStorage.setItem('mdedit-language', language) } catch { /* Preference storage may be unavailable. */ }
+  }, [language])
   useEffect(() => {
     try { localStorage.setItem('mdedit-pdf-options', JSON.stringify(pdfOptions)) } catch { /* Preference storage may be unavailable. */ }
   }, [pdfOptions])
@@ -246,7 +261,7 @@ export default function App() {
       const current = getSession(id)
       if (!current || current.path !== original.path) return false
       if (workspaceRef.current.tabs.some(tab => tab.id !== id && tab.path === opened.path)) {
-        setNotice('目标文件已在其他标签打开，请选择其他位置。当前内容已保留。')
+        setNotice(noted('notice.saveAsCollision'))
         return false
       }
       const next: DocumentSession = {
@@ -264,7 +279,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (original) update(id, current => failSaveAs(current, message))
-      setNotice(`另存为失败：${message}`)
+      setNotice(noted('notice.saveAsFailed', { error: message }))
       return false
     } finally { endOperation() }
   }, [backup, beginOperation, endOperation, getSession, update])
@@ -277,10 +292,10 @@ export default function App() {
       if (!current) return
       const { buildExportBody } = await import('./export-content')
       const body = await buildExportBody(current.text, current.path)
-      const target = await window.mdedit.exportDocument(format, documentName(current.path), body, format === 'pdf' ? pdfOptions : undefined)
-      if (target) setNotice(`已导出到 ${target}`)
+      const target = await window.mdedit.exportDocument(format, documentName(current.path, languageRef.current), body, format === 'pdf' ? pdfOptions : undefined)
+      if (target) setNotice(noted('notice.exported', { path: target }))
     } catch (error) {
-      setNotice(`导出 ${format.toUpperCase()} 失败：${error instanceof Error ? error.message : String(error)}`)
+      setNotice(noted('notice.exportFailed', { format: format.toUpperCase(), error: String(error) }))
     } finally { endOperation() }
   }, [beginOperation, endOperation, getSession, pdfOptions])
 
@@ -288,16 +303,16 @@ export default function App() {
     const id = editorId.current
     if (id === null || operationLock.current || files.length === 0) return
     if (files.length > 20 || files.some(file => !file.size || file.size > 10 * 1024 * 1024) || files.reduce((total, file) => total + file.size, 0) > 50 * 1024 * 1024) {
-      setNotice('一次最多导入 20 张图片；单张不超过 10 MB，总量不超过 50 MB。')
+      setNotice(noted('notice.imagesLimit'))
       return
     }
     if (!beginOperation(id)) return
     let images: { bytes: Uint8Array }[]
     try {
       images = await Promise.all(files.map(async file => ({ bytes: new Uint8Array(await file.arrayBuffer()) })))
-      if (images.some(image => !imageExtension(image.bytes))) throw new Error('仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片')
+      if (images.some(image => !imageExtension(image.bytes))) throw new Error(text(languageRef.current, 'notice.imageUnsupported'))
     } catch (error) {
-      setNotice(`导入图片失败：${error instanceof Error ? error.message : String(error)}`)
+      setNotice(noted('notice.importFailed', { error: String(error) }))
       return
     } finally { endOperation() }
     if (!getSession(id)?.path && !(await saveAs(id))) return
@@ -306,12 +321,12 @@ export default function App() {
       const current = getSession(id)
       if (!current?.path || editor.current !== view || editorId.current !== id) return
       const paths = await window.mdedit.importImages(current.path, images)
-      const markdown = paths.map((path, index) => `![${imageAlt(files[index].name)}](${path})`).join('\n')
+      const markdown = paths.map((path, index) => `![${imageAlt(files[index].name, languageRef.current)}](${path})`).join('\n')
       view.dispatch({ changes: { from, to, insert: markdown }, selection: { anchor: from + markdown.length } })
       setNotice(null)
       view.focus()
     } catch (error) {
-      setNotice(`导入图片失败：${error instanceof Error ? error.message : String(error)}`)
+      setNotice(noted('notice.importFailed', { error: String(error) }))
     } finally { endOperation() }
   }, [beginOperation, endOperation, getSession, saveAs])
 
@@ -332,10 +347,10 @@ export default function App() {
     let allowMixed = false
     if (snapshot.lineEnding === 'mixed') {
       if (!manual) {
-        update(id, current => failSave(current, '文件包含混合换行，请手动确认转换为 LF 或另存副本'))
+        update(id, current => failSave(current, 'MIXED_LINE_ENDING'))
         return false
       }
-      allowMixed = window.confirm('文件包含混合换行。保存将统一转换为 LF。继续吗？')
+      allowMixed = window.confirm(text(languageRef.current, 'notice.mixedLineConfirm'))
       if (!allowMixed) return false
     }
     update(id, beginSave)
@@ -376,21 +391,21 @@ export default function App() {
       const opened = await operation()
       if (!opened) return null
       changeWorkspace(current => openTab(current, sessionFromDocument(opened)))
-      setNotice(opened.lineEnding === 'mixed' ? '此文件包含混合换行。写回前需要确认统一为 LF，或另存副本。' : null)
+      setNotice(opened.lineEnding === 'mixed' ? noted('notice.mixedLineNotice') : null)
       void window.mdedit.recentFiles().then(setRecent)
       return opened
-    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); return null }
+    } catch (error) { setNotice(rawNotice(error)); return null }
     finally { endOperation() }
   }, [beginOperation, changeWorkspace, endOperation])
   const chooseFolder = useCallback(async () => {
     try {
       const root = await window.mdedit.chooseWorkspaceFolder()
       if (root) { setFolderRoot(root); setSidebarView('files'); setNotice(null) }
-    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+    } catch (error) { setNotice(rawNotice(error)) }
   }, [])
   const closeFolder = useCallback(async () => {
     try { await window.mdedit.closeWorkspaceFolder(); setFolderRoot(null) }
-    catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+    catch (error) { setNotice(rawNotice(error)) }
   }, [])
   const openSearchResult = useCallback(async (result: WorkspaceSearchResult, query: string) => {
     const opened = await openDocument(() => window.mdedit.openWorkspaceDocument(result.path))
@@ -398,7 +413,7 @@ export default function App() {
     const current = workspaceRef.current.tabs.find(tab => tab.path === opened.path)
     const match = searchResultPosition(result, query, opened, current?.text ?? opened.text)
     if (match) setJumpRequest({ path: opened.path, ...match })
-    else setNotice('搜索结果对应的内容已改变，请重新搜索。')
+    else setNotice(noted('notice.staleSearch'))
   }, [openDocument])
   const newDocument = useCallback(() => {
     if (operationLock.current) return
@@ -419,9 +434,9 @@ export default function App() {
       previewPositions.current.delete(id)
       backedUp.current.delete(id)
       setPreviews(state => { const next = { ...state }; delete next[id]; previewsRef.current = next; return next })
-      setNotice(needsBackup(current) ? '已关闭标签，未保存内容可从恢复草稿找回。' : null)
+      setNotice(needsBackup(current) ? noted('notice.closedBackup') : null)
       void window.mdedit.listDrafts().then(setDrafts)
-    } catch (error) { setNotice(`无法安全关闭标签，内容仍保留：${String(error)}`) }
+    } catch (error) { setNotice(noted('notice.closeFailed', { error: String(error) })) }
     finally { endOperation() }
   }, [backup, beginOperation, changeWorkspace, endOperation, getSession])
   const restore = useCallback(async (draft: Draft) => {
@@ -437,11 +452,11 @@ export default function App() {
       const restored = applyEdit(base, draft.text)
       if (base.path && draft.fingerprint !== base.diskFingerprint) {
         restored.saveState = 'conflict'
-        restored.error = '草稿建立后磁盘文件已改变。请重新载入或将草稿另存副本。'
+        restored.error = 'DRAFT_DISK_CHANGED'
       }
       await backup(restored)
       changeWorkspace(current => openTab(current, restored))
-      if (sourceMissing || existing) setNotice(sourceMissing ? '原文件不可用，草稿已作为未命名文档打开。' : '原文档已在其他标签打开，恢复草稿已作为未命名副本打开。')
+      if (sourceMissing || existing) setNotice(noted(sourceMissing ? 'notice.draftSourceMissing' : 'notice.draftAlreadyOpen'))
       if (restored.draftKey !== draft.key) {
         // An already open dirty document still needs its own independent recovery record.
         const original = existing && getSession(existing.id)
@@ -449,7 +464,7 @@ export default function App() {
         await window.mdedit.deleteDraft(draft.key, { revision: draft.revision, updatedAt: draft.updatedAt })
       }
       setDrafts(items => items.filter(item => item.key !== draft.key))
-    } catch (error) { setNotice(`恢复草稿失败：${String(error)}`) }
+    } catch (error) { setNotice(noted('notice.restoreFailed', { error: String(error) })) }
     finally { endOperation() }
   }, [backup, beginOperation, changeWorkspace, endOperation, getSession])
   const reload = useCallback(async () => {
@@ -472,7 +487,7 @@ export default function App() {
       previewPositions.current.delete(id)
       setNotice(null)
       void window.mdedit.listDrafts().then(setDrafts)
-    } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) }
+    } catch (error) { setNotice(rawNotice(error)) }
     finally { endOperation() }
   }, [backup, beginOperation, changeWorkspace, endOperation, getSession])
 
@@ -480,8 +495,8 @@ export default function App() {
     const view = editor.current
     if (!view || operationLock.current) return
     const range = view.state.selection.main
-    const text = view.state.sliceDoc(range.from, range.to) || '文本'
-    view.dispatch({ changes: { from: range.from, to: range.to, insert: `${left}${text}${right}` }, selection: { anchor: range.from + left.length, head: range.from + left.length + text.length } })
+    const selectedText = view.state.sliceDoc(range.from, range.to) || text(languageRef.current, 'common.text')
+    view.dispatch({ changes: { from: range.from, to: range.to, insert: `${left}${selectedText}${right}` }, selection: { anchor: range.from + left.length, head: range.from + left.length + selectedText.length } })
     view.focus()
   }, [])
   const insertBlock = useCallback((insertion: MarkdownInsertion) => {
@@ -690,7 +705,7 @@ export default function App() {
         if (lockedId.current === -1 || lockedId.current === tab.id || !needsBackup(tab)) continue
         const age = Date.now() - tab.editedAt
         const signature = `${tab.path}:${tab.revision}:${tab.editedAt}`
-        if (age >= 500 && backedUp.current.get(tab.id) !== signature && !draftWrites.current.has(tab.id)) void backup(tab).catch(error => setNotice(`${documentName(tab.path)} 草稿备份失败：${String(error)}`))
+        if (age >= 500 && backedUp.current.get(tab.id) !== signature && !draftWrites.current.has(tab.id)) void backup(tab).catch(error => setNotice(noted('notice.draftBackupFailed', { name: documentName(tab.path, languageRef.current), error: String(error) })))
         if (age >= 2000 && tab.path && tab.saveState === 'editing' && !saves.current.has(tab.id)) void saveNow(tab.id)
       }
     }, 250)
@@ -709,29 +724,29 @@ export default function App() {
     let active = true
     for (const block of Array.from(root.querySelectorAll('pre'))) {
       if (block.querySelector('button[data-copy-code]')) continue
-      const button = Object.assign(document.createElement('button'), { textContent: '复制', className: 'copy-code' })
+      const button = Object.assign(document.createElement('button'), { textContent: text(language, 'pane.copy'), className: 'copy-code' })
       button.dataset.copyCode = 'true'
-      button.setAttribute('aria-label', '复制代码块')
+      button.setAttribute('aria-label', text(language, 'pane.copyCode'))
       block.append(button)
     }
     for (const image of Array.from(root.querySelectorAll<HTMLImageElement>('img[data-local-src]'))) {
       const source = image.dataset.localSrc
       if (!source || !session.path) {
-        image.replaceWith(Object.assign(document.createElement('span'), { textContent: '保存文件后可预览本地图片', className: 'image-placeholder' }))
+        image.replaceWith(Object.assign(document.createElement('span'), { textContent: text(language, 'pane.imageSaveFirst'), className: 'image-placeholder' }))
         continue
       }
       void window.mdedit.readImage(session.path, source).then(data => { if (active) image.src = data }).catch(() => {
-        if (active) image.replaceWith(Object.assign(document.createElement('span'), { textContent: `图片无法读取：${image.alt}`, className: 'image-placeholder' }))
+        if (active) image.replaceWith(Object.assign(document.createElement('span'), { textContent: text(language, 'pane.imageUnreadable', { name: image.alt }), className: 'image-placeholder' }))
       })
     }
     return () => { active = false }
-  }, [lastPreview?.html, session.id, session.path, previewVisible, resolvedTheme])
+  }, [lastPreview?.html, session.id, session.path, previewVisible, resolvedTheme, language])
   useEffect(() => {
     const root = previewHost.current
     if (!root) return
     let active = true
     void renderMermaidBlocks(root, resolvedTheme, () => active).catch(error => {
-      if (active) setNotice(`图表预览失败：${error instanceof Error ? error.message : String(error)}`)
+      if (active) setNotice(noted('notice.diagramPreviewFailed', { error: String(error) }))
     })
     return () => { active = false }
   }, [lastPreview?.html, session.id, previewVisible, resolvedTheme])
@@ -743,17 +758,17 @@ export default function App() {
       else void openDocument(() => window.mdedit.openSystemFile(path))
     })
     const unlistenChange = window.mdedit.onExternalChange(path => {
-      for (const tab of workspaceRef.current.tabs) if (tab.path === path) update(tab.id, current => ({ ...current, saveState: 'conflict', error: '磁盘文件已改变。重新载入或将当前内容另存副本。' }))
+      for (const tab of workspaceRef.current.tabs) if (tab.path === path) update(tab.id, current => ({ ...current, saveState: 'conflict', error: 'EXTERNAL_CHANGED' }))
     })
     const unlistenClose = window.mdedit.onBeforeClose(async () => {
-      if (!beginOperation(workspaceRef.current.activeId)) throw new Error('请等待当前文件操作完成后再关闭窗口')
+      if (!beginOperation(workspaceRef.current.activeId)) throw new Error(text(languageRef.current, 'notice.closeBusy'))
       // Freeze automatic work for every tab while the close handshake takes its snapshot.
       lockedId.current = -1
       try {
         await Promise.all([...saves.current.values()].map(item => item.promise))
         await Promise.all(workspaceRef.current.tabs.filter(needsBackup).map(backup))
         await Promise.all([...draftWrites.current.values()])
-      } catch (error) { setNotice(`关闭前无法备份草稿：${String(error)}`); throw error }
+      } catch (error) { setNotice(noted('notice.beforeCloseBackupFailed', { error: String(error) })); throw error }
       finally { endOperation() }
     })
     const shortcuts = (event: KeyboardEvent) => {
@@ -787,14 +802,14 @@ export default function App() {
     const target = event.target as HTMLElement
     const copy = target.closest<HTMLButtonElement>('button[data-copy-code]')
     if (copy) {
-      void navigator.clipboard.writeText(copy.parentElement?.querySelector('code')?.textContent ?? '').then(() => { if (copy.isConnected) copy.textContent = '已复制' }).catch(error => setNotice(`复制失败：${String(error)}`))
+      void navigator.clipboard.writeText(copy.parentElement?.querySelector('code')?.textContent ?? '').then(() => { if (copy.isConnected) copy.textContent = t('pane.copied') }).catch(error => setNotice(noted('notice.copyFailed', { error: String(error) })))
       return
     }
     const link = target.closest('a[href]')
     if (link) {
       event.preventDefault()
       const href = link.getAttribute('href') ?? ''
-      if (href.startsWith('https:')) void window.mdedit.openExternal(href).catch(error => setNotice(String(error)))
+      if (href.startsWith('https:')) void window.mdedit.openExternal(href).catch(error => setNotice(rawNotice(error)))
       else if (href && !href.includes(':') && !href.startsWith('#') && session.path) {
         const basePath = session.path
         void openDocument(() => window.mdedit.openRelative(basePath, href))
@@ -855,102 +870,103 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar">
       <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
-      <span className={`save-status status-${session.saveState}`} role="status" aria-live="polite"><i />{statusLabel(session)}</span>
+      <span className={`save-status status-${session.saveState}`} role="status" aria-live="polite"><i />{statusLabel(session, language)}</span>
       <div className="top-actions">
-        <button disabled={busy} onClick={newDocument} title="新建 (⌘/Ctrl+N)">新建</button>
-        <button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())} title="打开 (⌘/Ctrl+O)">打开</button>
-        <button disabled={busy} className="primary" onClick={() => void saveNow(session.id, true)} title="保存 (⌘/Ctrl+S)">保存</button>
+        <button disabled={busy} onClick={newDocument} title={`${t('menu.new')} (⌘/Ctrl+N)`}>{t('menu.new')}</button>
+        <button disabled={busy} onClick={() => void openDocument(() => window.mdedit.chooseOpen())} title={`${t('menu.open')} (⌘/Ctrl+O)`}>{t('menu.open')}</button>
+        <button disabled={busy} className="primary" onClick={() => void saveNow(session.id, true)} title={`${t('menu.save')} (⌘/Ctrl+S)`}>{t('menu.save')}</button>
         <details className="app-menu file-menu" ref={fileMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
-          <summary aria-label="文件操作">文件</summary>
+          <summary aria-label={t('menu.fileActions')}>{t('menu.file')}</summary>
           <div className="menu-panel">
-            <button disabled={busy} onClick={() => runFromMenu(() => void chooseFolder())}>打开文件夹</button>
-            <button disabled={busy} onClick={() => runFromMenu(() => void saveAs())}>另存为…</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => void chooseFolder())}>{t('menu.openFolder')}</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => void saveAs())}>{t('menu.saveAs')}</button>
             <div className="menu-separator" />
-            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('html'))}>导出 HTML…</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('html'))}>{t('menu.exportHtml')}</button>
             <div className="menu-separator" />
-            <span className="menu-caption">PDF 导出设置</span>
-            <label className="menu-field">纸张尺寸<select value={pdfOptions.paperSize} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, paperSize: event.target.value as PdfPaperSize }))}><option value="A4">A4</option><option value="A5">A5</option><option value="Letter">Letter</option></select></label>
-            <label className="menu-field">页边距<select value={pdfOptions.margin} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, margin: event.target.value as PdfMargin }))}><option value="narrow">窄 · 10 mm</option><option value="normal">标准 · 18 mm</option><option value="wide">宽 · 25 mm</option></select></label>
-            <label className="pdf-page-break"><input type="checkbox" checked={pdfOptions.pageBreakBeforeH1} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, pageBreakBeforeH1: event.target.checked }))} />一级标题从新页开始</label>
-            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('pdf'))}>导出 PDF…</button>
-            {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">最近文件</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path)}<small>{path}</small></button>)}</>}
+            <span className="menu-caption">{t('menu.pdfSettings')}</span>
+            <label className="menu-field">{t('menu.paperSize')}<select value={pdfOptions.paperSize} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, paperSize: event.target.value as PdfPaperSize }))}><option value="A4">A4</option><option value="A5">A5</option><option value="Letter">Letter</option></select></label>
+            <label className="menu-field">{t('menu.margin')}<select value={pdfOptions.margin} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, margin: event.target.value as PdfMargin }))}><option value="narrow">{t('menu.marginNarrow')}</option><option value="normal">{t('menu.marginNormal')}</option><option value="wide">{t('menu.marginWide')}</option></select></label>
+            <label className="pdf-page-break"><input type="checkbox" checked={pdfOptions.pageBreakBeforeH1} disabled={busy} onChange={event => setPdfOptions(current => ({ ...current, pageBreakBeforeH1: event.target.checked }))} />{t('menu.pageBreakH1')}</label>
+            <button disabled={busy} onClick={() => runFromMenu(() => void exportCurrent('pdf'))}>{t('menu.exportPdf')}</button>
+            {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">{t('menu.recentFiles')}</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path, language)}<small>{path}</small></button>)}</>}
           </div>
         </details>
       </div>
     </header>
-    <nav className="tabbar" aria-label="文档标签"><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
-      <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? '未命名文档'} · ${statusLabel(tab)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path)}</span></button>
-      <button disabled={busy} className="close-tab" aria-label={`关闭 ${documentName(tab.path)}`} title="关闭标签 (⌘/Ctrl+W)" onClick={() => void closeDocument(tab.id)}>×</button>
-    </div>)}</div><button disabled={busy} className="new-tab" aria-label="新建文档标签" onClick={newDocument}>＋</button>
+    <nav className="tabbar" aria-label={t('tabs.label')}><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
+      <button role="tab" tabIndex={tab.id === session.id ? 0 : -1} onKeyDown={event => onTabKeyDown(event, index)} aria-selected={tab.id === session.id} aria-controls="document-editor" disabled={busy} title={`${tab.path ?? t('tabs.untitled')} · ${statusLabel(tab, language)}`} onClick={() => { changeWorkspace(state => activateTab(state, tab.id)); setNotice(null) }}><span className={`tab-indicator status-${tab.saveState}`} aria-label={statusLabel(tab, language)}>{tab.saveState === 'conflict' || tab.saveState === 'error' ? '!' : tab.saveState === 'saving' ? '↻' : needsBackup(tab) ? '●' : '○'}</span><span>{documentName(tab.path, language)}</span></button>
+      <button disabled={busy} className="close-tab" aria-label={t('tabs.close', { name: documentName(tab.path, language) })} title={t('tabs.closeTitle')} onClick={() => void closeDocument(tab.id)}>×</button>
+    </div>)}</div><button disabled={busy} className="new-tab" aria-label={t('tabs.new')} onClick={newDocument}>＋</button>
       {drafts.length > 0 && <details className="app-menu recovery-menu" ref={recoveryMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
-        <summary aria-label={`可恢复草稿，${drafts.length} 份`}>可恢复草稿 <strong>{drafts.length}</strong></summary>
+        <summary aria-label={t('recovery.count', { count: drafts.length })}>{t('recovery.label')} <strong>{drafts.length}</strong></summary>
         <div className="menu-panel recovery-panel">
-          <div className="recovery-heading">可恢复草稿 <span>{drafts.length} 份</span></div>
+          <div className="recovery-heading">{t('recovery.label')} <span>{t(drafts.length === 1 ? 'recovery.one' : 'recovery.many', { count: drafts.length })}</span></div>
           {drafts.map(draft => {
-            const { title, detail } = draftPreview(draft)
-            const updated = new Date(draft.updatedAt).toLocaleString('zh-CN', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-            return <button disabled={busy} key={draft.key} aria-label={`恢复草稿：${title}${draft.path ? `，路径 ${draft.path}` : detail ? `，${detail}` : ''}，${updated}`} title={draft.path ?? title} onClick={() => runFromMenu(() => void restore(draft))}>
+            const { title, detail } = draftPreview(draft, language)
+            const updated = new Date(draft.updatedAt).toLocaleString(language, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            return <button disabled={busy} key={draft.key} aria-label={`${t('recovery.restore', { title })}${draft.path ? `, ${t('recovery.path', { path: draft.path })}` : detail ? `, ${detail}` : ''}, ${updated}`} title={draft.path ?? title} onClick={() => runFromMenu(() => void restore(draft))}>
               <span className="recovery-title">{title}</span>
               {detail && <span className="recovery-excerpt" title={draft.path ?? detail}>{detail}</span>}
-              <small>{draft.path ? (draft.diskModifiedAt === null ? '原文件不可用' : '文件草稿') : '未命名'} · {updated} · {draft.text.length} 字符</small>
+              <small>{draft.path ? (draft.diskModifiedAt === null ? t('recovery.missing') : t('recovery.file')) : t('recovery.untitled')} · {updated} · {t('recovery.characters', { count: draft.text.length })}</small>
             </button>
           })}
         </div>
       </details>}
     </nav>
-    {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice || session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>重新载入磁盘文件</button><button disabled={busy} onClick={() => void saveAs()}>将当前内容另存副本</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>重试</button><button disabled={busy} onClick={() => void saveAs()}>另存为</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
+    {(notice || session.error) && <div className={`notice ${session.saveState === 'conflict' ? 'notice-conflict' : ''}`}><span>{notice ? 'key' in notice ? t(notice.key, notice.values) : notice.raw : session.error === 'MIXED_LINE_ENDING' ? t('notice.mixedLineError') : session.error === 'DRAFT_DISK_CHANGED' ? t('notice.draftDiskChanged') : session.error === 'EXTERNAL_CHANGED' ? t('notice.externalChanged') : session.error}</span>{session.saveState === 'conflict' ? <div><button disabled={busy} onClick={() => void reload()}>{t('tabs.reloadDisk')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('tabs.saveCopy')}</button></div> : session.saveState === 'error' ? <div><button disabled={busy} onClick={() => void saveNow(session.id, true)}>{t('tabs.retry')}</button><button disabled={busy} onClick={() => void saveAs()}>{t('menu.saveAs')}</button></div> : null}{notice && <button className="plain" onClick={() => setNotice(null)}>×</button>}</div>}
     <div className="toolbar">
-      <div className="tool-group sidebar-tools" role="group" aria-label="侧栏">
-        <button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>文件</button>
-        <button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>搜索</button>
-        <button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>目录</button>
+      <div className="tool-group sidebar-tools" role="group" aria-label={t('toolbar.sidebar')}>
+        <button className={sidebarView === 'files' ? 'selected' : ''} aria-expanded={sidebarView === 'files'} onClick={() => setSidebarView(value => value === 'files' ? null : 'files')}>{t('sidebar.files')}</button>
+        <button className={sidebarView === 'search' ? 'selected' : ''} aria-expanded={sidebarView === 'search'} onClick={() => setSidebarView(value => value === 'search' ? null : 'search')}>{t('sidebar.search')}</button>
+        <button className={sidebarView === 'outline' ? 'selected' : ''} aria-expanded={sidebarView === 'outline'} onClick={() => setSidebarView(value => value === 'outline' ? null : 'outline')}>{t('sidebar.outline')}</button>
       </div>
-      <div className="tool-group format-tools" role="group" aria-label="格式">
-        <select aria-label="标题级别" disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>正文</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>H6（当前）</option>}</select>
-        <button disabled={busy} aria-label="粗体" onClick={() => wrapSelection('**')} title="粗体 (⌘/Ctrl+B)"><b>B</b></button>
-        <button disabled={busy} aria-label="斜体" onClick={() => wrapSelection('*')} title="斜体 (⌘/Ctrl+I)"><i>I</i></button>
-        <button disabled={busy} onClick={() => wrapSelection('[', '](https://)')}>链接</button>
+      <div className="tool-group format-tools" role="group" aria-label={t('toolbar.format')}>
+        <select aria-label={t('toolbar.headingLevel')} disabled={busy} value={headingLevel} onChange={event => changeHeading(Number(event.target.value) as 0 | 1 | 2 | 3 | 4 | 5)}><option value={0}>{t('toolbar.body')}</option>{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>H{level}</option>)}{headingLevel === 6 && <option value={6} disabled>{t('toolbar.currentH6')}</option>}</select>
+        <button disabled={busy} aria-label={t('toolbar.bold')} onClick={() => wrapSelection('**')} title={`${t('toolbar.bold')} (⌘/Ctrl+B)`}><b>B</b></button>
+        <button disabled={busy} aria-label={t('toolbar.italic')} onClick={() => wrapSelection('*')} title={`${t('toolbar.italic')} (⌘/Ctrl+I)`}><i>I</i></button>
+        <button disabled={busy} onClick={() => wrapSelection('[', '](https://)')}>{t('toolbar.link')}</button>
         <details className="app-menu insert-menu" ref={insertMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
-          <summary>插入</summary>
+          <summary>{t('menu.insert')}</summary>
           <div className="menu-panel">
-            <button disabled={busy} onClick={() => runFromMenu(() => wrapSelection('`'))}>行内代码</button>
-            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('quote')))}>引用</button>
-            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('code')))}>代码块</button>
-            <label className="menu-field">列表格式<select aria-label="列表格式" disabled={busy} value="" onChange={event => runFromMenu(() => changeList(event.target.value as ListKind))}><option value="" disabled>选择列表类型</option><option value="unordered">无序列表</option><option value="ordered">有序列表</option><option value="task">任务列表</option></select></label>
+            <button disabled={busy} onClick={() => runFromMenu(() => wrapSelection('`'))}>{t('insert.inlineCode')}</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('quote')))}>{t('insert.quote')}</button>
+            <button disabled={busy} onClick={() => runFromMenu(() => insertBlock(blockTemplate('code')))}>{t('insert.codeBlock')}</button>
+            <label className="menu-field">{t('insert.listFormat')}<select aria-label={t('insert.listFormat')} disabled={busy} value="" onChange={event => runFromMenu(() => changeList(event.target.value as ListKind))}><option value="" disabled>{t('insert.chooseList')}</option><option value="unordered">{t('insert.unordered')}</option><option value="ordered">{t('insert.ordered')}</option><option value="task">{t('insert.task')}</option></select></label>
             <div className="menu-separator" />
-            <button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>表格 <span aria-hidden="true">{tableOpen ? '▴' : '▾'}</span></button>
+            <button disabled={busy} aria-expanded={tableOpen} onClick={() => setTableOpen(value => !value)}>{t('insert.table')} <span aria-hidden="true">{tableOpen ? '▴' : '▾'}</span></button>
             {tableOpen && <div className="table-picker">
               {tableContext && <div className="table-edit-actions">
-                <strong>编辑当前表格</strong>
-                {!tableContext.editable && <p>此表格有额外单元格，无法安全编辑。</p>}
-                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-row'))}>下方插入行</button><button type="button" disabled={busy || !tableContext.editable || tableContext.row === 0} onClick={() => runFromMenu(() => runTableAction('delete-row'))}>删除当前行</button></div>
-                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-column'))}>右侧插入列</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runFromMenu(() => runTableAction('delete-column'))}>删除当前列</button></div>
-                <select aria-label="当前列对齐" disabled={busy || !tableContext.editable} value="" onChange={event => runFromMenu(() => runTableAction(event.target.value as TableAction))}><option value="" disabled>设置当前列对齐</option><option value="align-default">默认</option><option value="align-left">左对齐</option><option value="align-center">居中</option><option value="align-right">右对齐</option></select>
+                <strong>{t('insert.editTable')}</strong>
+                {!tableContext.editable && <p>{t('insert.tableCannotEdit')}</p>}
+                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-row'))}>{t('insert.insertRow')}</button><button type="button" disabled={busy || !tableContext.editable || tableContext.row === 0} onClick={() => runFromMenu(() => runTableAction('delete-row'))}>{t('insert.deleteRow')}</button></div>
+                <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-column'))}>{t('insert.insertColumn')}</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runFromMenu(() => runTableAction('delete-column'))}>{t('insert.deleteColumn')}</button></div>
+                <select aria-label={t('insert.columnAlign')} disabled={busy || !tableContext.editable} value="" onChange={event => runFromMenu(() => runTableAction(event.target.value as TableAction))}><option value="" disabled>{t('insert.setColumnAlign')}</option><option value="align-default">{t('insert.alignDefault')}</option><option value="align-left">{t('insert.alignLeft')}</option><option value="align-center">{t('insert.alignCenter')}</option><option value="align-right">{t('insert.alignRight')}</option></select>
               </div>}
-              <form onSubmit={event => { event.preventDefault(); runFromMenu(() => insertBlock(createTable(tableColumns, tableRows))) }}><strong>插入新表格</strong><label>列数<input aria-label="表格列数" type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>正文行数<input aria-label="表格正文行数" type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">插入表格</button><button type="button" onClick={() => setTableOpen(false)}>取消</button></form>
+              <form onSubmit={event => { event.preventDefault(); runFromMenu(() => insertBlock(createTable(tableColumns, tableRows, language))) }}><strong>{t('insert.newTable')}</strong><label>{t('insert.columns')}<input aria-label={t('insert.columns')} type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>{t('insert.bodyRows')}<input aria-label={t('insert.bodyRows')} type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">{t('insert.insertTable')}</button><button type="button" onClick={() => setTableOpen(false)}>{t('insert.cancel')}</button></form>
             </div>}
           </div>
         </details>
       </div>
       <div className="toolbar-right">
-        <button className="find-tool" onClick={() => editor.current && openSearchPanel(editor.current)} title="查找与替换 (⌘/Ctrl+F)" aria-label="查找与替换">⌕</button>
+        <button className="find-tool" onClick={() => editor.current && openSearchPanel(editor.current)} title={`${t('view.findReplace')} (⌘/Ctrl+F)`} aria-label={t('view.findReplace')}>⌕</button>
         <details className="app-menu view-menu" ref={viewMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
-          <summary>视图</summary>
+          <summary>{t('menu.view')}</summary>
           <div className="menu-panel">
-            <button className={focusMode ? 'selected' : ''} aria-pressed={focusMode} onClick={() => runFromMenu(() => setFocusMode(value => !value))}>专注模式 <span>{focusMode ? '✓' : ''}</span></button>
-            <button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => runFromMenu(() => setTypewriterMode(value => !value))}>打字机模式 <span>{typewriterMode ? '✓' : ''}</span></button>
+            <button className={focusMode ? 'selected' : ''} aria-pressed={focusMode} onClick={() => runFromMenu(() => setFocusMode(value => !value))}>{t('view.focusMode')} <span>{focusMode ? '✓' : ''}</span></button>
+            <button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => runFromMenu(() => setTypewriterMode(value => !value))}>{t('view.typewriterMode')} <span>{typewriterMode ? '✓' : ''}</span></button>
             <div className="menu-separator" />
-            <label className="menu-field">外观主题<select aria-label="外观主题" value={themePreference} onChange={event => runFromMenu(() => setThemePreference(event.target.value as ThemePreference))}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+            <label className="menu-field">{t('view.theme')}<select aria-label={t('view.theme')} value={themePreference} onChange={event => runFromMenu(() => setThemePreference(event.target.value as ThemePreference))}><option value="system">{t('view.themeSystem')}</option><option value="light">{t('view.themeLight')}</option><option value="dark">{t('view.themeDark')}</option></select></label>
+            <label className="menu-field">{t('menu.language')}<select aria-label={t('menu.language')} value={language} onChange={event => runFromMenu(() => setLanguage(parseLanguage(event.target.value)))}><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
           </div>
         </details>
-        <button className={previewVisible ? 'selected preview-toggle' : 'preview-toggle'} aria-pressed={previewVisible} onClick={() => setPreviewVisible(value => !value)}>{previewVisible ? '预览开启' : '预览关闭'}</button>
+        <button className={previewVisible ? 'selected preview-toggle' : 'preview-toggle'} aria-pressed={previewVisible} onClick={() => setPreviewVisible(value => !value)}>{t(previewVisible ? 'view.previewOn' : 'view.previewOff')}</button>
       </div>
     </div>
     <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
-      {sidebarView && <WorkspaceSidebar key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
-      <section className="editor-pane" id="document-editor"><div className="pane-label">编辑</div><div className="editor-host" ref={editorHost} /></section>
-      {previewVisible && <section className="preview-pane"><div className="pane-label">预览 {preview ? '' : <span>更新中…</span>}</div>{preview?.error ? <div className="preview-error">预览失败：{preview.error}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} /></div>}</section>}
+      {sidebarView && <WorkspaceSidebar language={language} key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
+      <section className="editor-pane" id="document-editor"><div className="pane-label">{t('pane.editor')}</div><div className="editor-host" ref={editorHost} /></section>
+      {previewVisible && <section className="preview-pane"><div className="pane-label">{t('pane.preview')} {preview ? '' : <span>{t('pane.updating')}</span>}</div>{preview?.error ? <div className="preview-error">{t('pane.previewFailed', { error: preview.error })}</div> : <div key={`${session.id}-${resolvedTheme}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.html ?? '' }} /></div>}</section>}
     </main>
-    <footer className="statusbar"><span>{session.path ?? '本地草稿 · 尚未指定文件'}</span><div><span>{preview?.words ?? '…'} 字</span><span>第 {cursor.line} 行，第 {cursor.column} 列</span><span>UTF-8 · {session.lineEnding.toUpperCase()}</span></div></footer>
+    <footer className="statusbar"><span>{session.path ?? t('pane.localDraft')}</span><div><span>{t('pane.words', { count: preview?.words ?? '…' })}</span><span>{t('pane.cursor', { line: cursor.line, column: cursor.column })}</span><span>UTF-8 · {session.lineEnding.toUpperCase()}</span></div></footer>
   </div>
 }

@@ -14,6 +14,15 @@ describe('interface language', () => {
     expect(text('zh-CN', 'recovery.count', { count: 2 })).toBe('2 份可恢复草稿')
   })
 
+  it('shows navigation and status labels in the selected language', () => {
+    expect(text('en', 'menu.file')).toBe('File')
+    expect(text('zh-CN', 'menu.file')).toBe('文件')
+    expect(text('en', 'status.saved')).toBe('Saved')
+    expect(text('zh-CN', 'status.saved')).toBe('已保存')
+    expect(text('en', 'sidebar.search')).toBe('Search')
+    expect(text('zh-CN', 'sidebar.search')).toBe('搜索')
+  })
+
   it('has a translation for every visible message in both languages', () => {
     expect(Object.keys(messages.en).sort()).toEqual(Object.keys(messages['zh-CN']).sort())
   })
