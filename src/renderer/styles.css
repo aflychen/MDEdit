@@ -105,8 +105,11 @@ button:disabled { cursor: wait; opacity: .55; }
 .recovery-menu > summary strong { min-width: 19px; padding: 1px 5px; border-radius: 10px; background: #3449a4; color: #fff; font-size: 10px; text-align: center; }
 .recovery-menu .menu-panel { left: auto; right: 0; width: min(360px, calc(100vw - 24px)); max-height: min(400px, var(--menu-available-height, 320px)); }
 .recovery-heading { display: flex; justify-content: space-between; padding: 8px 10px 10px; color: #384a65; font-size: 12px; font-weight: 700; }
-.recovery-heading span { color: #68778c; font-weight: 400; }
-.recovery-menu .menu-panel > button { display: block; padding: 9px 10px; }
+.recovery-heading button { padding: 3px 5px; border-radius: 4px; color: #a14b48; font-size: 11px; font-weight: 600; }
+.recovery-item { display: flex; align-items: center; gap: 3px; min-width: 0; border-radius: 5px; }
+.recovery-item:hover { background: #f1f4fa; }
+.recovery-item .recovery-restore { display: block; flex: 1; min-width: 0; padding: 9px 10px; border-radius: 5px; text-align: left; color: #44536a; font-size: 12px; }
+.recovery-item .recovery-delete { flex: none; margin-right: 5px; padding: 5px 7px; border-radius: 5px; color: #a14b48; font-size: 11px; font-weight: 600; }
 .recovery-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .recovery-excerpt { display: block; overflow: hidden; margin-top: 3px; color: #68778c; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .recovery-menu .menu-panel small { color: #68778c; font-size: 11px; }
@@ -194,7 +197,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .recovery-menu > summary strong { background: #8395f7; color: #172139; }
 :root[data-theme="dark"] .menu-panel, :root[data-theme="dark"] .table-picker { color: #dce5f1; background: #253247; border-color: #48566b; }
 :root[data-theme="dark"] .recovery-heading { color: #dce5f1; }
-:root[data-theme="dark"] .recovery-heading span, :root[data-theme="dark"] .recovery-excerpt { color: #acbad0; }
+:root[data-theme="dark"] .recovery-excerpt { color: #acbad0; }
+:root[data-theme="dark"] .recovery-item:hover { background: #34445a; }
+:root[data-theme="dark"] .recovery-item .recovery-restore { color: #dce5f1; }
+:root[data-theme="dark"] .recovery-heading button, :root[data-theme="dark"] .recovery-item .recovery-delete { color: #f1aba7; }
 :root[data-theme="dark"] .menu-panel > button { color: #dce5f1; }
 :root[data-theme="dark"] .menu-panel button:hover { color: #f0f4fb; background: #34445a; }
 :root[data-theme="dark"] .menu-panel button:disabled:hover { background: transparent; }

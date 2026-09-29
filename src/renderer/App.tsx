@@ -140,6 +140,7 @@ export default function App() {
   const insertMenu = useRef<HTMLDetailsElement>(null)
   const viewMenu = useRef<HTMLDetailsElement>(null)
   const recoveryMenu = useRef<HTMLDetailsElement>(null)
+  const recoveryFocus = useRef<{ kind: 'delete' | 'clear'; index: number } | null>(null)
   const editorHost = useRef<HTMLDivElement>(null)
   const previewHost = useRef<HTMLDivElement>(null)
   const editor = useRef<EditorView | null>(null)
@@ -222,6 +223,19 @@ export default function App() {
   useLayoutEffect(() => {
     for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]) if (menu?.open) positionMenu(menu)
   }, [notice, session.error, drafts.length])
+  useLayoutEffect(() => {
+    const next = recoveryFocus.current
+    if (!next) return
+    recoveryFocus.current = null
+    if (drafts.length === 0) { document.querySelector<HTMLButtonElement>('.new-tab')?.focus(); return }
+    const menu = recoveryMenu.current
+    if (!menu?.open) return
+    if (next.kind === 'clear') menu.querySelector<HTMLButtonElement>('.recovery-clear-all')?.focus()
+    else {
+      const buttons = menu.querySelectorAll<HTMLButtonElement>('.recovery-delete')
+      buttons[Math.min(next.index, buttons.length - 1)]?.focus()
+    }
+  }, [drafts])
 
   const changeWorkspace = useCallback((change: (current: TabWorkspace) => TabWorkspace) => {
     const next = change(workspaceRef.current)
@@ -481,6 +495,22 @@ export default function App() {
     } catch (error) { setNotice(noted('notice.restoreFailed', { error: String(error) })) }
     finally { endOperation() }
   }, [backup, beginOperation, changeWorkspace, endOperation, getSession])
+  const deleteRecoveryDrafts = useCallback(async (selected: Draft[], focus: { kind: 'delete' | 'clear'; index: number }) => {
+    if (!beginOperation(workspaceRef.current.activeId)) return
+    lockedId.current = -1
+    try {
+      await Promise.allSettled([...draftWrites.current.values()])
+      const results = await Promise.allSettled(selected.map(draft => window.mdedit.deleteDraft(draft.key, { revision: draft.revision, updatedAt: draft.updatedAt })))
+      const remaining = await window.mdedit.listDrafts()
+      recoveryFocus.current = focus
+      setDrafts(remaining)
+      const failure = results.find(result => result.status === 'rejected')
+      if (failure?.status === 'rejected') setNotice(noted('notice.draftDeleteFailed', { error: String(failure.reason) }))
+      else if (selected.some(draft => remaining.some(current => current.key === draft.key))) setNotice(noted('notice.draftChangedDuringDelete'))
+      else setNotice(null)
+    } catch (error) { recoveryFocus.current = null; setNotice(noted('notice.draftDeleteFailed', { error: String(error) })) }
+    finally { endOperation() }
+  }, [beginOperation, endOperation])
   const reload = useCallback(async () => {
     const id = workspaceRef.current.activeId
     if (!beginOperation(id)) return
@@ -930,15 +960,19 @@ export default function App() {
       {drafts.length > 0 && <details className="app-menu recovery-menu" ref={recoveryMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
         <summary aria-label={t('recovery.count', { count: drafts.length })}>{t('recovery.label')} <strong>{drafts.length}</strong></summary>
         <div className="menu-panel recovery-panel">
-          <div className="recovery-heading">{t('recovery.label')} <span>{t(drafts.length === 1 ? 'recovery.one' : 'recovery.many', { count: drafts.length })}</span></div>
-          {drafts.map(draft => {
+          <div className="recovery-heading"><strong>{t('recovery.label')}</strong><button className="recovery-clear-all" disabled={busy} onClick={() => { if (window.confirm(t('recovery.confirmClearAll', { count: drafts.length }))) void deleteRecoveryDrafts(drafts, { kind: 'clear', index: 0 }) }}>{t('recovery.clearAll')}</button></div>
+          {drafts.map((draft, index) => {
             const { title, detail } = draftPreview(draft, language)
             const updated = new Date(draft.updatedAt).toLocaleString(language, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-            return <button disabled={busy} key={draft.key} aria-label={`${t('recovery.restore', { title })}${draft.path ? `, ${t('recovery.path', { path: draft.path })}` : detail ? `, ${detail}` : ''}, ${updated}`} title={draft.path ?? title} onClick={() => runFromMenu(() => void restore(draft))}>
-              <span className="recovery-title">{title}</span>
-              {detail && <span className="recovery-excerpt" title={draft.path ?? detail}>{detail}</span>}
-              <small>{draft.path ? (draft.diskModifiedAt === null ? t('recovery.missing') : t('recovery.file')) : t('recovery.untitled')} · {updated} · {t('recovery.characters', { count: draft.text.length })}</small>
-            </button>
+            const context = `${draft.path ? `, ${t('recovery.path', { path: draft.path })}` : detail ? `, ${detail}` : ''}, ${updated}`
+            return <div className="recovery-item" key={draft.key}>
+              <button className="recovery-restore" disabled={busy} aria-label={`${t('recovery.restore', { title })}${context}`} title={draft.path ?? title} onClick={() => runFromMenu(() => void restore(draft))}>
+                <span className="recovery-title">{title}</span>
+                {detail && <span className="recovery-excerpt" title={draft.path ?? detail}>{detail}</span>}
+                <small>{draft.path ? (draft.diskModifiedAt === null ? t('recovery.missing') : t('recovery.file')) : t('recovery.untitled')} · {updated} · {t('recovery.characters', { count: draft.text.length })}</small>
+              </button>
+              <button className="recovery-delete" disabled={busy} aria-label={`${t('recovery.deleteNamed', { title })}${context}`} title={t('recovery.deleteNamed', { title })} onClick={() => { if (window.confirm(t('recovery.confirmDelete', { title: draft.path ?? `${title} · ${updated}` }))) void deleteRecoveryDrafts([draft], { kind: 'delete', index }) }}>{t('recovery.delete')}</button>
+            </div>
           })}
         </div>
       </details>}
