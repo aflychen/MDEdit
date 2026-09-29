@@ -98,7 +98,8 @@ export default function App() {
   const [workspace, setWorkspace] = useState(initialWorkspace)
   const workspaceRef = useRef(workspace)
   const session = workspace.tabs.find(tab => tab.id === workspace.activeId)!
-  const [previewVisible, setPreviewVisible] = useState(true)
+  const [workspaceMode, setWorkspaceMode] = useState<'editor' | 'split' | 'preview'>('split')
+  const previewVisible = workspaceMode !== 'editor'
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
@@ -143,6 +144,8 @@ export default function App() {
   const previewHost = useRef<HTMLDivElement>(null)
   const editor = useRef<EditorView | null>(null)
   const editorId = useRef<number | null>(null)
+  const workspaceModeRef = useRef(workspaceMode)
+  workspaceModeRef.current = workspaceMode
   const editorStates = useRef(new Map<number, EditorSnapshot>())
   const previewPositions = useRef(new Map<number, number>())
   const editorExtensions = useRef<Extension[]>([])
@@ -420,7 +423,10 @@ export default function App() {
     if (!opened) return
     const current = workspaceRef.current.tabs.find(tab => tab.path === opened.path)
     const match = searchResultPosition(result, query, opened, current?.text ?? opened.text)
-    if (match) setJumpRequest({ path: opened.path, ...match })
+    if (match) {
+      if (workspaceModeRef.current === 'preview') setWorkspaceMode('split')
+      setJumpRequest({ path: opened.path, ...match })
+    }
     else setNotice(noted('notice.staleSearch'))
   }, [openDocument])
   const newDocument = useCallback(() => {
@@ -577,6 +583,11 @@ export default function App() {
   const jumpToHeading = useCallback((heading: OutlineHeading) => {
     const view = editor.current
     if (!view || operationLock.current) return
+    if (workspaceModeRef.current === 'preview') {
+      setActiveSectionLine(heading.line)
+      syncPreviewToLine(heading.line)
+      return
+    }
     const line = view.state.doc.line(Math.min(heading.line, view.state.doc.lines))
     scrollGuard.current = true
     view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 12 }) })
@@ -687,12 +698,13 @@ export default function App() {
   useLayoutEffect(() => {
     const view = editor.current
     if (!jumpRequest || !view || jumpRequest.path !== session.path || editorId.current !== session.id) return
+    if (workspaceMode === 'preview') { setWorkspaceMode('split'); return }
     const line = view.state.doc.line(Math.min(Math.max(1, jumpRequest.line), view.state.doc.lines))
     const position = line.from + Math.min(Math.max(0, jumpRequest.column - 1), line.length)
     view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: 'center' }) })
     view.focus()
     setJumpRequest(null)
-  }, [jumpRequest, session.id, session.path])
+  }, [jumpRequest, session.id, session.path, workspaceMode])
   useEffect(() => {
     const instance = new Worker(new URL('./preview.worker.ts', import.meta.url), { type: 'module' })
     worker.current = instance
@@ -727,6 +739,9 @@ export default function App() {
     root.scrollTop = previewPositions.current.get(session.id) ?? 0
     requestAnimationFrame(() => { scrollGuard.current = false })
   }, [session.id, previewVisible, lastPreview?.html, lastPreview?.language, resolvedTheme, language])
+  useLayoutEffect(() => {
+    if (workspaceMode !== 'preview') editor.current?.requestMeasure()
+  }, [workspaceMode])
   useEffect(() => {
     const root = previewHost.current
     if (!root) return
@@ -791,7 +806,10 @@ export default function App() {
       if (key === 'o') void openDocument(() => window.mdedit.chooseOpen())
       if (key === 'n') newDocument()
       if (key === 'w') void closeDocument(current.activeId)
-      if (key === 'f' && editor.current) openSearchPanel(editor.current)
+      if (key === 'f' && editor.current) {
+        if (workspaceModeRef.current === 'preview') setWorkspaceMode('split')
+        requestAnimationFrame(() => { if (editor.current) openSearchPanel(editor.current) })
+      }
       if (key === 'tab') {
         const index = current.tabs.findIndex(tab => tab.id === current.activeId)
         const next = (index + (event.shiftKey ? -1 : 1) + current.tabs.length) % current.tabs.length
@@ -841,6 +859,7 @@ export default function App() {
     const index = precedingIndex(headings.map(item => item.getBoundingClientRect().top), root.getBoundingClientRect().top + 24)
     if (index < 0) {
       setActiveSectionLine(1)
+      if (workspaceMode === 'preview') return
       scrollGuard.current = true
       view.scrollDOM.scrollTop = 0
       requestAnimationFrame(() => { scrollGuard.current = false })
@@ -849,6 +868,7 @@ export default function App() {
     const heading = preview.outline[index]
     if (!heading) return
     setActiveSectionLine(heading.line)
+    if (workspaceMode === 'preview') return
     scrollGuard.current = true
     const line = view.state.doc.line(Math.min(heading.line, view.state.doc.lines))
     view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 12 }) })
@@ -876,7 +896,7 @@ export default function App() {
     for (const menu of [fileMenu.current, insertMenu.current, viewMenu.current, recoveryMenu.current]) if (menu && menu !== opened) menu.open = false
     if (opened !== insertMenu.current) setTableOpen(false)
   }
-  return <div className="app-shell">
+  return <div className={`app-shell mode-${workspaceMode}`}>
     <header className="topbar">
       <div className="brand"><img className="brand-mark" src={iconUrl} alt="" /><span>MDEdit</span></div>
       <span className={`save-status status-${session.saveState}`} role="status" aria-live="polite"><i />{statusLabel(session, language)}</span>
@@ -900,6 +920,7 @@ export default function App() {
             {recent.length > 0 && <><div className="menu-separator" /><span className="menu-caption">{t('menu.recentFiles')}</span>{recent.map(path => <button disabled={busy} key={path} title={path} onClick={() => runFromMenu(() => void openDocument(() => window.mdedit.openRecent(path)))}>{documentName(path, language)}<small>{path}</small></button>)}</>}
           </div>
         </details>
+        <button className="language-toggle" onClick={() => setLanguage(current => current === 'en' ? 'zh-CN' : 'en')} title={t('menu.switchLanguage')} aria-label={t('menu.switchLanguage')}><span aria-hidden="true">🌐</span> {language === 'en' ? 'English' : '中文'}</button>
       </div>
     </header>
     <nav className="tabbar" aria-label={t('tabs.label')}><div role="tablist">{workspace.tabs.map((tab, index) => <div className={`document-tab ${tab.id === session.id ? 'active' : ''}`} key={tab.id}>
@@ -957,7 +978,7 @@ export default function App() {
         </details>
       </div>
       <div className="toolbar-right">
-        <button className="find-tool" onClick={() => editor.current && openSearchPanel(editor.current)} title={`${t('view.findReplace')} (⌘/Ctrl+F)`} aria-label={t('view.findReplace')}>⌕</button>
+        <button className="find-tool" onClick={() => { if (workspaceMode === 'preview') setWorkspaceMode('split'); requestAnimationFrame(() => { if (editor.current) openSearchPanel(editor.current) }) }} title={`${t('view.findReplace')} (⌘/Ctrl+F)`} aria-label={t('view.findReplace')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></button>
         <details className="app-menu view-menu" ref={viewMenu} onToggle={event => onMenuToggle(event.currentTarget)}>
           <summary>{t('menu.view')}</summary>
           <div className="menu-panel">
@@ -965,13 +986,14 @@ export default function App() {
             <button className={typewriterMode ? 'selected' : ''} aria-pressed={typewriterMode} onClick={() => runFromMenu(() => setTypewriterMode(value => !value))}>{t('view.typewriterMode')} <span>{typewriterMode ? '✓' : ''}</span></button>
             <div className="menu-separator" />
             <label className="menu-field">{t('view.theme')}<select aria-label={t('view.theme')} value={themePreference} onChange={event => runFromMenu(() => setThemePreference(event.target.value as ThemePreference))}><option value="system">{t('view.themeSystem')}</option><option value="light">{t('view.themeLight')}</option><option value="dark">{t('view.themeDark')}</option></select></label>
-            <label className="menu-field">{t('menu.language')}<select aria-label={t('menu.language')} value={language} onChange={event => runFromMenu(() => setLanguage(parseLanguage(event.target.value)))}><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
           </div>
         </details>
-        <button className={previewVisible ? 'selected preview-toggle' : 'preview-toggle'} aria-pressed={previewVisible} onClick={() => setPreviewVisible(value => !value)}>{t(previewVisible ? 'view.previewOn' : 'view.previewOff')}</button>
+        <div className="layout-switch" role="group" aria-label={t('view.layout')}>
+          {(['editor', 'split', 'preview'] as const).map(mode => <button key={mode} data-mode={mode} className={workspaceMode === mode ? 'selected' : ''} aria-pressed={workspaceMode === mode} aria-label={mode === 'split' ? t('view.splitDescription') : undefined} title={mode === 'split' ? t('view.splitDescription') : undefined} onClick={() => setWorkspaceMode(mode)}>{t(mode === 'editor' ? 'view.editorOnly' : mode === 'split' ? 'view.splitView' : 'view.previewOnly')}</button>)}
+        </div>
       </div>
     </div>
-    <main className={`workspace ${previewVisible ? 'split' : 'editor-only'} ${sidebarView ? 'with-sidebar' : ''}`}>
+    <main className={`workspace ${workspaceMode === 'editor' ? 'editor-only' : workspaceMode === 'preview' ? 'preview-only' : 'split'} ${sidebarView ? 'with-sidebar' : ''}`}>
       {sidebarView && <WorkspaceSidebar language={language} key={folderRoot ?? 'no-folder'} view={sidebarView} root={folderRoot} activePath={session.path} outline={lastPreview?.outline} documentId={session.id} activeLine={activeSectionLine} busy={busy} onChooseFolder={() => void chooseFolder()} onCloseFolder={() => void closeFolder()} onOpenFile={path => void openDocument(() => window.mdedit.openWorkspaceDocument(path))} onOpenResult={(result, query) => void openSearchResult(result, query)} onJumpHeading={jumpToHeading} onClose={() => setSidebarView(null)} />}
       <section className="editor-pane" id="document-editor"><div className="pane-label">{t('pane.editor')}</div><div className="editor-host" ref={editorHost} /></section>
       {previewVisible && <section className="preview-pane"><div className="pane-label">{t('pane.preview')} {preview ? '' : <span>{t('pane.updating')}</span>}</div>{preview?.error ? <div className="preview-error">{t('pane.previewFailed', { error: preview.error })}</div> : <div key={`${session.id}-${resolvedTheme}-${language}`} className="preview-content" ref={previewHost} onClick={onPreviewClick} onScroll={onPreviewScroll}><article className="preview-article" dangerouslySetInnerHTML={{ __html: lastPreview?.language === language ? lastPreview.html ?? '' : '' }} /></div>}</section>}

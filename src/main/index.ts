@@ -122,6 +122,8 @@ function createWindow(): void {
 }
 
 app.on('open-file', (event, path) => { event.preventDefault(); requestedFile(path) })
+const profileOption = process.argv.find(arg => arg.startsWith('--user-data-dir='))
+if (profileOption) app.setPath('userData', profileOption.slice('--user-data-dir='.length))
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', (_event, argv) => {
