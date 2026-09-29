@@ -4,8 +4,8 @@ import { markdown } from '@codemirror/lang-markdown'
 import { syntaxTree } from '@codemirror/language'
 import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { openSearchPanel } from '@codemirror/search'
-import { localizeAppError } from '../shared/error-messages'
+import { openSearchPanel, search } from '@codemirror/search'
+import { describeAppError, localizeAppError } from '../shared/error-messages'
 import { parseLanguage, text, type Language, type MessageKey } from '../shared/language'
 import iconUrl from '../../assets/icon.svg'
 import type { Draft, OpenedDocument, WorkspaceSearchResult } from '../shared/contracts'
@@ -16,6 +16,7 @@ import { precedingIndex } from './outline-navigation'
 import type { OutlineHeading } from './preview'
 import WorkspaceSidebar from './WorkspaceSidebar'
 import { editorTheme } from './editor-theme'
+import { createDocumentSearchPanel, searchLanguage } from './search-panel'
 import { parseThemePreference, resolveTheme, type ThemePreference } from './theme'
 import { searchResultPosition } from './search-navigation'
 import { renderMermaidBlocks } from './mermaid-preview'
@@ -110,8 +111,8 @@ export default function App() {
   })
   const languageRef = useRef(language)
   languageRef.current = language
-  const t = (key: MessageKey, values?: Record<string, string | number>) => text(language, key, values)
-  const localizedError = (message: string) => localizeAppError(language, message)
+  const t = (key: MessageKey, values?: Record<string, string | number>) => text(language, key, values && 'error' in values ? { ...values, error: localizeAppError(language, String(values.error).replace(/^Error:\s*/, '')) } : values)
+  const localizedError = (message: string) => describeAppError(language, message)
   const [pdfOptions, setPdfOptions] = useState<PdfExportOptions>(() => {
     try { return parsePdfExportOptions(JSON.parse(localStorage.getItem('mdedit-pdf-options') ?? 'null')) }
     catch { return { ...DEFAULT_PDF_EXPORT_OPTIONS } }
@@ -148,6 +149,7 @@ export default function App() {
   const worker = useRef<Worker | null>(null)
   const editability = useRef(new Compartment())
   const editorAppearance = useRef(new Compartment())
+  const searchLanguageCompartment = useRef(new Compartment())
   const focusAppearance = useRef(new Compartment())
   const typewriterBehavior = useRef(new Compartment())
   const lockedId = useRef<number | null>(null)
@@ -176,6 +178,9 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('mdedit-pdf-options', JSON.stringify(pdfOptions)) } catch { /* Preference storage may be unavailable. */ }
   }, [pdfOptions])
+  useEffect(() => {
+    editor.current?.dispatch({ effects: searchLanguageCompartment.current.reconfigure(searchLanguage.of(language)) })
+  }, [language])
   useEffect(() => {
     editor.current?.dispatch({ effects: editorAppearance.current.reconfigure(editorTheme(resolvedTheme)) })
   }, [resolvedTheme])
@@ -583,7 +588,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     if (!editorHost.current) return
-    editorExtensions.current = [basicSetup, markdown(), editability.current.of(EditorState.readOnly.of(false)), editorAppearance.current.of(editorTheme(resolvedTheme)), focusAppearance.current.of(focusMode ? focusModeExtension : []), typewriterBehavior.current.of(typewriterMode ? typewriterModeExtension : []), EditorView.lineWrapping,
+    editorExtensions.current = [basicSetup, markdown(), search({ createPanel: createDocumentSearchPanel }), searchLanguageCompartment.current.of(searchLanguage.of(languageRef.current)), editability.current.of(EditorState.readOnly.of(false)), editorAppearance.current.of(editorTheme(resolvedTheme)), focusAppearance.current.of(focusMode ? focusModeExtension : []), typewriterBehavior.current.of(typewriterMode ? typewriterModeExtension : []), EditorView.lineWrapping,
       Prec.high(keymap.of([
         { key: 'Tab', run: view => {
           if (operationLock.current) return false

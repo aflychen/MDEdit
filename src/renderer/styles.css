@@ -234,3 +234,33 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .preview-content .hljs-built_in, :root[data-theme="dark"] .preview-content .hljs-type, :root[data-theme="dark"] .preview-content .hljs-name { color: #8fd8dc; }
 :root[data-theme="dark"] .preview-content .hljs-meta { color: #c3abed; }
 :root[data-theme="dark"] .preview-content .hljs-deletion { color: #f2a3ad; }
+
+/* Document search stays within the editor column, including the minimum window size. */
+.editor-host .cm-panels { border-color: #e2e6ec; background: #f9faff; color: #344253; }
+.editor-host .cm-panel.md-search-panel { display: flex; flex-direction: column; gap: 7px; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; padding: 9px 11px; border-bottom: 1px solid #dce3f2; font: 12px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.md-search-panel .md-search-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.md-search-panel .md-search-input { flex: 1 1 120px; min-width: 0; width: 120px; height: 30px; padding: 0 9px; border: 1px solid #d7deea; border-radius: 6px; outline: none; background: #fff; color: #263446; font: inherit; }
+.md-search-panel .md-search-input::placeholder { color: #8995a7; }
+.md-search-panel .md-search-input:focus-visible { border-color: #5369e2; box-shadow: 0 0 0 3px #5369e229; }
+.md-search-panel .md-search-actions { display: flex; align-items: center; flex: 0 0 auto; gap: 4px; }
+.md-search-panel .md-search-button { min-height: 29px; padding: 0 8px; border: 1px solid #d7deea; border-radius: 6px; background: #fff; color: #475a75; font: inherit; font-weight: 600; white-space: nowrap; }
+.md-search-panel .md-search-find-row .md-search-button { width: 29px; padding: 0; font-size: 16px; }
+.md-search-panel .md-search-button:hover:not(:disabled) { background: #edf1ff; border-color: #c1cafa; color: #2942c5; }
+.md-search-panel .md-search-button:focus-visible, .md-search-panel .md-search-option:focus-within { outline: 2px solid #5369e2; outline-offset: 2px; }
+.md-search-panel .md-search-button:disabled { opacity: .48; cursor: default; }
+.md-search-panel .md-search-options { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 11px; min-width: 0; }
+.md-search-panel .md-search-option { display: inline-flex; align-items: center; gap: 4px; min-height: 25px; border-radius: 4px; color: #596a80; white-space: nowrap; cursor: pointer; font-size: 11px; }
+.md-search-panel .md-search-option input { margin: 0; width: 13px; height: 13px; accent-color: #4057cf; }
+.md-search-panel [data-action="toggle-replace"] { min-height: 25px; margin-left: auto; padding: 0 6px; color: #344ed0; border-color: transparent; background: transparent; font-size: 11px; }
+.md-search-panel [data-action="toggle-replace"][aria-expanded="true"] { background: #e9edff; }
+.md-search-panel .md-search-replace-row[hidden], .md-search-panel .md-search-error[hidden] { display: none; }
+.md-search-panel .md-search-error { color: #b54847; font-size: 11px; }
+:root[data-theme="dark"] .editor-host .cm-panels { background: #222e42; border-color: #415067; color: #dce5f1; }
+:root[data-theme="dark"] .editor-host .cm-panel.md-search-panel { border-color: #415067; }
+:root[data-theme="dark"] .md-search-panel .md-search-input, :root[data-theme="dark"] .md-search-panel .md-search-button { color: #e0e8f4; background: #29374e; border-color: #4c5b75; }
+:root[data-theme="dark"] .md-search-panel .md-search-input::placeholder { color: #92a1b8; }
+:root[data-theme="dark"] .md-search-panel .md-search-button:hover:not(:disabled) { color: #e9edff; background: #37496c; border-color: #6679ad; }
+:root[data-theme="dark"] .md-search-panel .md-search-option { color: #b4c1d3; }
+:root[data-theme="dark"] .md-search-panel [data-action="toggle-replace"] { color: #bbc8ff; background: transparent; border-color: transparent; }
+:root[data-theme="dark"] .md-search-panel [data-action="toggle-replace"][aria-expanded="true"] { background: #34466e; }
+:root[data-theme="dark"] .md-search-panel .md-search-error { color: #ffb2ad; }

@@ -1,4 +1,4 @@
-import type { Language } from '../shared/language'
+import { text, type Language } from '../shared/language'
 import { BrowserWindow, dialog, session } from 'electron'
 import { constants } from 'node:fs'
 import { mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -100,7 +100,7 @@ export async function exportDocument(owner: BrowserWindow, format: ExportFormat,
   const name = title.replace(/\.md$/i, '') || (language === 'en' ? 'Untitled' : '未命名文档')
   const result = await dialog.showSaveDialog(owner, { defaultPath: `${name}${extension}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
   if (result.canceled || !result.filePath) return null
-  if (extname(result.filePath).toLowerCase() !== extension) throw new Error(`请使用 ${extension} 扩展名保存导出文件`)
+  if (extname(result.filePath).toLowerCase() !== extension) throw new Error(text(language, 'export.extensionRequired', { extension }))
   const html = await standaloneHtml(title, body, language, options)
   await writeAtomic(result.filePath, options ? await renderPdf(html, options) : html)
   return result.filePath

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { WorkspaceEntry, WorkspaceSearchResponse, WorkspaceSearchResult } from '../shared/contracts'
 import type { OutlineHeading } from './preview'
 import { precedingIndex, visibleOutlineIndices } from './outline-navigation'
+import { describeAppError } from '../shared/error-messages'
 import { text, type Language } from '../shared/language'
 
 type SidebarView = 'files' | 'search' | 'outline'
@@ -59,7 +60,7 @@ function FileNode({ entry, activePath, busy, onOpenFile, language }: {
     </button>
     {expanded && entry.kind === 'directory' && <ul className="tree-children">
       {loading && <li className="sidebar-muted">{text(language, 'sidebar.loading')}</li>}
-      {error && <li className="sidebar-error">{error}</li>}
+      {error && <li className="sidebar-error">{describeAppError(language, error)}</li>}
       {children?.length === 0 && <li className="sidebar-muted">{text(language, 'sidebar.noMarkdown')}</li>}
       {children?.map(item => <FileNode key={item.path} entry={item} activePath={activePath} busy={busy} onOpenFile={onOpenFile} language={language} />)}
     </ul>}
@@ -139,11 +140,11 @@ export default function WorkspaceSidebar({ language, view, root, activePath, out
     }) : <p>{text(language, 'sidebar.noMatchingHeadings')}</p> : <p>{text(language, 'sidebar.addHeading')}</p>}</nav></>}
     {view === 'files' && <div className="sidebar-body">
       <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{text(language, root ? 'sidebar.switchFolder' : 'sidebar.chooseFolder')}</button>{root && <button onClick={onCloseFolder} disabled={busy}>{text(language, 'sidebar.closeFolder')}</button>}</div>
-      {root && <><p className="folder-name" title={root}>{nameOf(root)}</p>{treeError && <p className="sidebar-error">{treeError}</p>}<ul className="file-tree">{entries.map(entry => <FileNode key={`${root}:${entry.path}`} entry={entry} activePath={activePath} busy={busy} onOpenFile={onOpenFile} language={language} />)}</ul>{!treeError && entries.length === 0 && <p className="sidebar-muted">{text(language, 'sidebar.noMarkdown')}</p>}</>}
+      {root && <><p className="folder-name" title={root}>{nameOf(root)}</p>{treeError && <p className="sidebar-error">{describeAppError(language, treeError)}</p>}<ul className="file-tree">{entries.map(entry => <FileNode key={`${root}:${entry.path}`} entry={entry} activePath={activePath} busy={busy} onOpenFile={onOpenFile} language={language} />)}</ul>{!treeError && entries.length === 0 && <p className="sidebar-muted">{text(language, 'sidebar.noMarkdown')}</p>}</>}
     </div>}
     {view === 'search' && <div className="sidebar-body">
       {!root ? <div className="folder-actions"><button onClick={onChooseFolder} disabled={busy}>{text(language, 'sidebar.chooseFolderToSearch')}</button></div> : <><form className="workspace-search" onSubmit={event => void submitSearch(event)}><input aria-label={text(language, 'sidebar.searchMarkdown')} value={query} onChange={event => { searchRequest.current++; setQuery(event.target.value); setSearch(null); setSubmittedQuery(''); setSearching(false) }} placeholder={text(language, 'sidebar.searchPlaceholder')} /><button type="submit" disabled={!query.trim() || searching}>{text(language, searching ? 'sidebar.searching' : 'sidebar.searchButton')}</button></form>
-        {searchError && <p className="sidebar-error">{searchError}</p>}
+        {searchError && <p className="sidebar-error">{describeAppError(language, searchError)}</p>}
         {search && <><p className="search-summary">{text(language, 'sidebar.searchResults', { count: search.results.length })}{search.truncated ? ` · ${text(language, 'sidebar.firstHundred')}` : ''}{search.skipped ? ` · ${text(language, 'sidebar.skipped', { count: search.skipped })}` : ''}</p><ul className="search-results">{search.results.map((result, index) => <li key={`${result.path}:${result.line}:${result.column}:${index}`}><button onClick={() => onOpenResult(result, submittedQuery)} disabled={busy}><strong>{result.path}:{result.line}</strong><span>{result.snippet}</span></button></li>)}</ul></>}
       </>}
     </div>}

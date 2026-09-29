@@ -1,4 +1,4 @@
-import type { Language } from './language'
+import { text, type Language } from './language'
 
 // Messages produced by application code are mapped in both directions so a
 // visible error can change language without repeating the failed operation.
@@ -54,6 +54,12 @@ const byEnglish = new Map<string, string>(pairs.map(([chinese, english]) => [eng
 
 export function localizeAppError(language: Language, message: string): string {
   return language === 'en' ? byChinese.get(message) ?? message : byEnglish.get(message) ?? message
+}
+
+export function describeAppError(language: Language, message: string): string {
+  const raw = message.replace(/^Error:\s*/, '')
+  if (byChinese.has(raw) || byEnglish.has(raw)) return localizeAppError(language, raw)
+  return text(language, 'notice.unknownError', { error: raw })
 }
 
 export function defaultUntitledFileName(language: Language): string {
