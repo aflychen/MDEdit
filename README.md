@@ -8,7 +8,7 @@
 
 面向 macOS 和 Windows 的本地 Markdown 编辑器。源码编辑使用 CodeMirror 6，预览支持 CommonMark、常用 GFM、代码块高亮、Mermaid 图表和数学公式。可选择本地文件夹浏览和搜索 Markdown 文档。文件保存在原 `.md` 路径，恢复草稿存放在 Electron 的应用数据目录。
 
-**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.7.4 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
+**macOS 特别说明：** v0.5.0 的 macOS 安装包存在启动失败问题，请改用较新版本。v0.7.5 仍是临时签名试用包，未经 Developer ID 签名和 Apple 公证；Gatekeeper 不会自动放行。如系统提示“已损坏”或拒绝打开，请在本机从源码构建，或等待正式签名和公证的版本。
 
 ### 开发
 
@@ -87,7 +87,7 @@ git push origin vX.Y.Z
 
 A local Markdown editor for macOS and Windows. Source editing is powered by CodeMirror 6. The preview supports CommonMark, commonly used GFM features, code block highlighting, Mermaid diagrams, and math formulas. You can browse and search Markdown documents in a local folder. Files are saved to their original `.md` paths, and recovery drafts are stored in Electron's application data directory.
 
-**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.7.4 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
+**macOS notice:** The macOS installer in v0.5.0 fails to launch; use a newer version instead. The v0.7.5 installer is still an ad hoc signed trial build. It has not been signed with a Developer ID or notarized by Apple, so Gatekeeper will not automatically allow it to run. If macOS says the app is damaged or refuses to open it, build from source on your Mac or wait for a properly signed and notarized release.
 
 ## Development
 

@@ -134,8 +134,8 @@ export default function App() {
   const [notice, setNotice] = useState<AppNotice | null>(null)
   const [busy, setBusy] = useState(false)
   const [tableOpen, setTableOpen] = useState(false)
-  const [tableColumns, setTableColumns] = useState(3)
-  const [tableRows, setTableRows] = useState(2)
+  const [tableColumns, setTableColumns] = useState('3')
+  const [tableRows, setTableRows] = useState('2')
   const fileMenu = useRef<HTMLDetailsElement>(null)
   const insertMenu = useRef<HTMLDetailsElement>(null)
   const viewMenu = useRef<HTMLDetailsElement>(null)
@@ -1006,7 +1006,7 @@ export default function App() {
                 <div><button type="button" disabled={busy || !tableContext.editable} onClick={() => runFromMenu(() => runTableAction('insert-column'))}>{t('insert.insertColumn')}</button><button type="button" disabled={busy || !tableContext.editable || tableContext.columns === 1} onClick={() => runFromMenu(() => runTableAction('delete-column'))}>{t('insert.deleteColumn')}</button></div>
                 <select aria-label={t('insert.columnAlign')} disabled={busy || !tableContext.editable} value="" onChange={event => runFromMenu(() => runTableAction(event.target.value as TableAction))}><option value="" disabled>{t('insert.setColumnAlign')}</option><option value="align-default">{t('insert.alignDefault')}</option><option value="align-left">{t('insert.alignLeft')}</option><option value="align-center">{t('insert.alignCenter')}</option><option value="align-right">{t('insert.alignRight')}</option></select>
               </div>}
-              <form onSubmit={event => { event.preventDefault(); runFromMenu(() => insertBlock(createTable(tableColumns, tableRows, language))) }}><strong>{t('insert.newTable')}</strong><label>{t('insert.columns')}<input aria-label={t('insert.columns')} type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(Number(event.target.value))} /></label><label>{t('insert.bodyRows')}<input aria-label={t('insert.bodyRows')} type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(Number(event.target.value))} /></label><button type="submit">{t('insert.insertTable')}</button><button type="button" onClick={() => setTableOpen(false)}>{t('insert.cancel')}</button></form>
+              <form onSubmit={event => { event.preventDefault(); runFromMenu(() => insertBlock(createTable(Number(tableColumns), Number(tableRows), language))) }}><strong>{t('insert.newTable')}</strong><label>{t('insert.columns')}<input aria-label={t('insert.columns')} type="number" min={1} max={20} required value={tableColumns} onChange={event => setTableColumns(event.target.value)} /></label><label>{t('insert.bodyRows')}<input aria-label={t('insert.bodyRows')} type="number" min={1} max={100} required value={tableRows} onChange={event => setTableRows(event.target.value)} /></label><button type="submit">{t('insert.insertTable')}</button><button type="button" onClick={() => setTableOpen(false)}>{t('insert.cancel')}</button></form>
             </div>}
           </div>
         </details>
