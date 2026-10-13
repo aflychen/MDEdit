@@ -41,7 +41,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .editor-pane, .preview-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }.editor-pane { border-right: 1px solid #e2e6ec; }
 .pane-label { display: flex; align-items: center; justify-content: space-between; flex: 0 0 33px; padding: 0 20px; color: #718093; border-bottom: 1px solid #f0f2f5; font-size: 12px; font-weight: 600; }
 .pane-label span { color: #8b98aa; font-size: 11px; font-weight: 400; }
-.editor-host { flex: 1; min-height: 0; overflow: auto; }.editor-host .cm-editor { height: 100%; font: 14px/1.75 'SFMono-Regular', Consolas, monospace; color: #26313e; }.editor-host .cm-scroller { padding: 20px 0 70px; }.editor-host .cm-content { padding: 0 25px; caret-color: #253cdb; }.editor-host .cm-gutters { border: 0; background: #fff; color: #abb5c2; padding-left: 12px; }.editor-host .cm-activeLine, .editor-host .cm-activeLineGutter { background: #f7f9ff; }.editor-host .cm-focused { outline: none; }.editor-host .cm-selectionBackground { background: #dce4ff !important; }
+.editor-host { flex: 1; min-height: 0; overflow: auto; }.editor-host .cm-editor { height: 100%; font: 14px/1.75 'SFMono-Regular', Consolas, monospace; color: #26313e; }.editor-host .cm-scroller { padding: 20px 0 70px; }.editor-host .cm-content { padding: 0 25px; caret-color: #253cdb; }.editor-host .cm-gutters { border: 0; background: #fff; color: #abb5c2; padding-left: 12px; }.editor-host .cm-activeLine { background: #f7f9ff80; }.editor-host .cm-activeLineGutter { background: #f7f9ff; }.editor-host .cm-focused { outline: none; }.editor-host .cm-selectionBackground { background: #dce4ff !important; }
 .workspace.editor-only .editor-host .cm-editor { width: 100%; max-width: 960px; margin: 0 auto; }
 .editor-host .cm-line.cm-focus-dim { opacity: .42; }
 .preview-content { flex: 1; overflow: auto; padding: 26px clamp(20px, 5vw, 56px) 75px; font-size: 15px; line-height: 1.8; color: #344253; overflow-wrap: anywhere; }
@@ -217,7 +217,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 :root[data-theme="dark"] .outline-pane nav .outline-link.active { color: #dce3ff; background: #33426b; }
 :root[data-theme="dark"] .editor-pane { border-color: #344154; }
 :root[data-theme="dark"] .editor-host .cm-editor, :root[data-theme="dark"] .editor-host .cm-gutters { color: #dce5f1; background: #1b2433; }
-:root[data-theme="dark"] .editor-host .cm-activeLine, :root[data-theme="dark"] .editor-host .cm-activeLineGutter { background: #263249; }
+:root[data-theme="dark"] .editor-host .cm-activeLine { background: #26324980; }
+:root[data-theme="dark"] .editor-host .cm-activeLineGutter { background: #263249; }
 :root[data-theme="dark"] .editor-host .cm-line.cm-focus-dim { opacity: .5; }
 :root[data-theme="dark"] .editor-host .cm-selectionBackground { background: #3b4b70 !important; }
 :root[data-theme="dark"] .preview-content { color: #d3deed; }
